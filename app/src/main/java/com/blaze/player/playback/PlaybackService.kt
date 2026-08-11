@@ -114,11 +114,20 @@ class PlaybackService : MediaSessionService() {
                 }
                 if (customCommand == prepareAndAutoplay || customCommand == retryPreparation) {
                     val item = args.getParcelable<MediaItem>("media_item")
+                    val requestedContext = args.getString("autoplay_context")
+                    val context = requestedContext
+                        ?.let { runCatching { AutoplayContext.valueOf(it) }.getOrNull() }
+                        ?: if (customCommand == retryPreparation) AutoplayContext.RETRY else AutoplayContext.PICKER
+                    // An unrecognised explicit context is never treated as a new
+                    // picker request, preventing stale callers from autoplaying.
+                    val shouldAutoplay = requestedContext == null ||
+                        runCatching { AutoplayPolicy.allows(AutoplayRequest(context, item?.mediaId.orEmpty())) }
+                            .getOrDefault(false)
                     // Reconnects or duplicate intent delivery must not reprepare the
                     // authoritative item. A genuinely new selection still replaces it.
                     if (item != null && (customCommand == retryPreparation || !(item.mediaId == preparedMediaId &&
                                 session.player.currentMediaItem?.mediaId == item.mediaId)) {
-                        autoplayPending = true
+                        autoplayPending = shouldAutoplay
                         preparedMediaId = item.mediaId
                         updateState(PlaybackState(PlaybackStatus.LOADING, mediaId = item.mediaId))
                         session.player.setMediaItem(item)

@@ -126,6 +126,7 @@ class MainActivity : ComponentActivity() {
             showLoading()
             c.sendCustomCommand(PlaybackService.prepareAndAutoplay, Bundle().apply {
                 putParcelable("media_item", result.mediaItem)
+                putString("autoplay_context", "PICKER")
             })
         } else {
             showError(com.blaze.player.playback.PlaybackError("Video unavailable", "The selected video cannot be opened. Choose another file.", false))
@@ -151,6 +152,7 @@ class MainActivity : ComponentActivity() {
             showLoading()
             c.sendCustomCommand(PlaybackService.prepareAndAutoplay, android.os.Bundle().apply {
                 putParcelable("media_item", result.mediaItem)
+                putString("autoplay_context", "SHARE")
             })
         } else if (result is com.blaze.player.source.SourceResult.Rejected && input.data?.scheme == "content") {
             showError(com.blaze.player.playback.PlaybackError("Video unavailable", "This shared video is no longer readable. Ask the sender to share it again.", false))
