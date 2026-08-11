@@ -12,5 +12,6 @@
     "lifecycle": ["PlaybackRecoveryTest", "AutoplayPolicyTest"],
     "gesture": ["PlaybackMathTest"],
     "persistence": ["PlaybackRepositoryTest", "PlaybackRecoveryTest", "PlaybackHistoryPolicyTest"]
+    ,"cross-area": ["CrossAreaContractTest"]
   }
 }
