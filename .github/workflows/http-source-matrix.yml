@@ -15,6 +15,8 @@ jobs:
     steps:
       # Immutable action revisions keep the validation entry point auditable.
       - uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683
+      - name: Make Gradle wrapper executable
+        run: chmod +x ./gradlew
       - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3
         with:
           distribution: temurin
