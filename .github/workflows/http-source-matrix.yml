@@ -58,7 +58,7 @@ jobs:
               find app/build/test-results/testDebugUnitTest -type f -delete
               find app/build/test-results/testDebugUnitTest -depth -type d -empty -delete
             fi
-            ./gradlew --no-daemon testDebugUnitTest --tests "$classname" || status=$?
+            ./gradlew --no-daemon --rerun-tasks testDebugUnitTest --tests "$classname" || status=$?
 
             local reports=()
             while IFS= read -r -d '' report; do
