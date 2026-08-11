@@ -35,6 +35,17 @@ The following are rejected before progressive preparation:
 - private-media caching, trust-all TLS, authorization headers, cookies, and
   other credential-bearing access mechanisms are not part of this policy.
 
+In short, a URL is **accepted by source normalization** when it is a readable
+direct HTTP(S) media URI with no credentials or adaptive/DRM markers. That
+acceptance preserves the original query and fragment in the `MediaItem`; it is
+not a claim that the remote server is reachable, that the response supports
+byte ranges, or that the device can decode the resulting container/codec.
+During preparation, the network response policy remains fail-closed: 2xx is
+the only successful status, 401/403 requires user action, redirects must obey
+the rules above, and a requested range that the server cannot satisfy is an
+actionable seek failure. These behaviors are covered by
+`SourcePolicyTest`'s URL, redirect, and response-policy matrix.
+
 Local `content://` sources are accepted only when the provider is readable.
 Persistable read permission is retained when the originating grant supports it;
 an accepted non-persistable grant is valid for the current handoff only.
@@ -57,7 +68,8 @@ keys or release secrets are used.
 
 The local environment for this project does not include the Android SDK,
 `adb`, or an emulator. Consequently, local static/unit checks can verify
-source-policy wiring, but they cannot verify network behavior on a device.
+source-policy wiring and the deterministic policy matrix, but they cannot
+verify a live network response or playback behavior on a device.
 Real pause/play and seek p95, first-frame and HTTP-seek latency, PiP,
 screen-off audio, notification/hardware controls, and codec/decoder behavior
 remain **unverified** until a CI/device validation run provides evidence.
