@@ -34,7 +34,7 @@ class PlaybackService : MediaSessionService() {
 
     }
     private lateinit var session: MediaSession
-    private var autoplayPending = false
+    private val autoplayTransitions = AutoplayTransitionController()
     private var preparedMediaId: String? = null
     private val settingsScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
@@ -62,9 +62,10 @@ class PlaybackService : MediaSessionService() {
                 updateState(PlaybackState(PlaybackStatus.LOADING, mediaId = player.currentMediaItem?.mediaId))
             }
             if (state == Player.STATE_READY) updateState(PlaybackState(PlaybackStatus.READY, mediaId = player.currentMediaItem?.mediaId))
-            if (state == Player.STATE_READY && autoplayPending && preparedMediaId == player.currentMediaItem?.mediaId) {
-                autoplayPending = false
-                player.play()
+            if (state == Player.STATE_READY) {
+                autoplayTransitions.prepared(player.currentMediaItem?.mediaId.orEmpty()).forEach { effect ->
+                    if (effect == AutoplayTransitionController.Effect.PLAY) player.play()
+                }
             }
         }
 
@@ -73,7 +74,7 @@ class PlaybackService : MediaSessionService() {
 
         override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
             // A failed prepare must never leave a later reconnect or retry with stale autoplay.
-            autoplayPending = false
+            autoplayTransitions.failed(preparedMediaId.orEmpty())
             updateState(PlaybackState(PlaybackStatus.ERROR, PlaybackErrorMapper.map(error), preparedMediaId))
         }
     }
@@ -132,7 +133,7 @@ class PlaybackService : MediaSessionService() {
                             )?.use { true } == true
                         }.getOrDefault(false)
                     ) {
-                        autoplayPending = false
+                        autoplayTransitions.failed(item.mediaId)
                         updateState(PlaybackState(PlaybackStatus.ERROR, PlaybackError(
                             "Video unavailable",
                             "This video is no longer accessible. Re-select it from storage.",
@@ -140,11 +141,13 @@ class PlaybackService : MediaSessionService() {
                         ), item.mediaId))
                     } else if (item != null && (customCommand == retryPreparation || !(item.mediaId == preparedMediaId &&
                                 session.player.currentMediaItem?.mediaId == item.mediaId)) {
-                        autoplayPending = shouldAutoplay
                         preparedMediaId = item.mediaId
-                        updateState(PlaybackState(PlaybackStatus.LOADING, mediaId = item.mediaId))
-                        session.player.setMediaItem(item)
-                        session.player.prepare()
+                        val effects = autoplayTransitions.request(item.mediaId, context, retry = customCommand == retryPreparation)
+                        if (effects.contains(AutoplayTransitionController.Effect.PREPARE)) {
+                            updateState(PlaybackState(PlaybackStatus.LOADING, mediaId = item.mediaId))
+                            session.player.setMediaItem(item)
+                            session.player.prepare()
+                        }
                     }
                 }
                 performance.boundary(PerformanceStage.POSITION_ACKNOWLEDGEMENT, args.getParcelable<MediaItem>("media_item")?.localConfiguration?.uri?.toString())
