@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Cleartext is denied at the application boundary. HTTP media eligibility is
+    decided by CleartextMediaPolicy for a user-originated source; this config
+    must never be changed to a global cleartext allowlist.
+-->
+<network-security-config>
+    <base-config cleartextTrafficPermitted="false" />
+</network-security-config>

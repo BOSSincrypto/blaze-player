@@ -25,8 +25,24 @@ data class NormalizedSource(
     val uri: Uri,
     val local: Boolean,
     val persistable: Boolean = false,
-    val identity: String = uri.toString()
+    val identity: String = uri.toString(),
+    val cleartextMediaAllowed: Boolean = CleartextMediaPolicy.allows(uri, SourceOrigin.USER_ENTERED)
 )
+
+/** Provenance required before a cleartext media request may be attempted. */
+enum class SourceOrigin { USER_SELECTED, USER_ENTERED, INTERNAL }
+
+/**
+ * Keeps the HTTP exception narrow. This is deliberately separate from the
+ * application network config, which remains deny-by-default for all traffic.
+ */
+object CleartextMediaPolicy {
+    fun allows(uri: Uri, origin: SourceOrigin): Boolean = when (uri.scheme?.lowercase()) {
+        "https" -> true
+        "http" -> origin == SourceOrigin.USER_SELECTED || origin == SourceOrigin.USER_ENTERED
+        else -> false
+    }
+}
 
 interface LocalSourceAccess {
     fun canRead(uri: Uri): Boolean
@@ -94,19 +110,19 @@ object SourceNormalizer {
     }
 
     fun normalize(uri: Uri?, access: LocalSourceAccess): SourceResult {
-        return normalize(uri, access, 0, emptyMap())
+        return normalize(uri, access, 0, emptyMap(), SourceOrigin.USER_ENTERED)
     }
 
     /** Normalizes an external URI and optional source metadata through the same policy. */
     fun normalize(uri: Uri?, access: LocalSourceAccess, metadata: Map<String, String>): SourceResult {
-        return normalize(uri, access, 0, metadata)
+        return normalize(uri, access, 0, metadata, SourceOrigin.USER_ENTERED)
     }
 
-    fun normalize(uri: Uri?, access: LocalSourceAccess, grantFlags: Int, metadata: Map<String, String> = emptyMap()): SourceResult {
+    fun normalize(uri: Uri?, access: LocalSourceAccess, grantFlags: Int, metadata: Map<String, String> = emptyMap(), origin: SourceOrigin = SourceOrigin.USER_ENTERED): SourceResult {
         if (uri == null || uri.toString().isBlank()) return SourceResult.Rejected(Reason.EMPTY)
         return when (uri.scheme?.lowercase()) {
             "content" -> normalizeLocal(uri, access, grantFlags)
-            "http", "https" -> normalizeRemote(uri, metadata)
+            "http", "https" -> normalizeRemote(uri, metadata, origin)
             else -> SourceResult.Rejected(Reason.UNSUPPORTED_SCHEME)
         }
     }
@@ -123,7 +139,7 @@ object SourceNormalizer {
         return SourceResult.Accepted(MediaItem.fromUri(uri), NormalizedSource(uri, local = true, persistable = persistable))
     }
 
-    private fun normalizeRemote(uri: Uri, metadata: Map<String, String>): SourceResult {
+    private fun normalizeRemote(uri: Uri, metadata: Map<String, String>, origin: SourceOrigin): SourceResult {
         val raw = uri.toString()
         val parsed = runCatching { URI(raw) }.getOrNull() ?: return SourceResult.Rejected(Reason.MALFORMED_URL)
         if (parsed.scheme !in listOf("http", "https") || parsed.host.isNullOrBlank()) {
@@ -138,7 +154,7 @@ object SourceNormalizer {
         if (path.endsWithAny(".m3u8", ".mpd") || parsed.query.orEmpty().contains("manifest", true)) {
             return SourceResult.Rejected(Reason.ADAPTIVE_NOT_SUPPORTED)
         }
-        return SourceResult.Accepted(MediaItem.fromUri(uri), NormalizedSource(uri, local = false))
+        return SourceResult.Accepted(MediaItem.fromUri(uri), NormalizedSource(uri, local = false, cleartextMediaAllowed = CleartextMediaPolicy.allows(uri, origin)))
     }
 
     private fun containsDrmMarker(value: String?): Boolean {

@@ -115,4 +115,15 @@ class SourcePolicyTest {
         assertNull(NetworkResponsePolicy.classify(206, true, true))
         assertEquals(NetworkFailure.HTTP_ERROR, NetworkResponsePolicy.classify(500, false, false))
     }
+
+    @Test fun `cleartext is limited to user media and never becomes global trust`() {
+        val http = Uri.parse("http://example.test/video.mp4")
+        val https = Uri.parse("https://example.test/video.mp4")
+        assertTrue(CleartextMediaPolicy.allows(http, SourceOrigin.USER_SELECTED))
+        assertTrue(CleartextMediaPolicy.allows(http, SourceOrigin.USER_ENTERED))
+        assertFalse(CleartextMediaPolicy.allows(http, SourceOrigin.INTERNAL))
+        assertTrue(CleartextMediaPolicy.allows(https, SourceOrigin.INTERNAL))
+        assertFalse(CleartextMediaPolicy.allows(Uri.parse("ftp://example.test/video.mp4"), SourceOrigin.USER_ENTERED))
+        assertFalse((SourceNormalizer.normalize(http, Access(), 0, emptyMap(), SourceOrigin.INTERNAL) as SourceResult.Accepted).source.cleartextMediaAllowed)
+    }
 }
