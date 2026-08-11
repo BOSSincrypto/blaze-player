@@ -48,12 +48,33 @@ jobs:
           set -euo pipefail
           mkdir -p build/reports/deferred-test-evidence/source-policy \
             build/reports/deferred-test-evidence/autoplay
-          find app/build/test-results -type f \
-            -name 'TEST-com.blaze.player.source.SourcePolicyTest.xml' \
-            -exec cp -- {} build/reports/deferred-test-evidence/source-policy/ \; || true
-          find app/build/test-results -type f \
-            -name 'TEST-com.blaze.player.playback.AutoplayTransitionControllerTest.xml' \
-            -exec cp -- {} build/reports/deferred-test-evidence/autoplay/ \; || true
+          source_reports=()
+          while IFS= read -r -d '' report; do
+            source_reports+=("$report")
+          done < <(find app/build/test-results -type f \
+            -name 'TEST-com.blaze.player.source.SourcePolicyTest.xml' -print0)
+          if (( ${#source_reports[@]} != 1 )); then
+            printf 'Expected exactly one SourcePolicyTest XML report, found %s\n' \
+              "${#source_reports[@]}" >&2
+            printf '%s\n' "${source_reports[@]}" >&2
+            exit 1
+          fi
+          cp -- "${source_reports[0]}" \
+            build/reports/deferred-test-evidence/source-policy/
+
+          autoplay_reports=()
+          while IFS= read -r -d '' report; do
+            autoplay_reports+=("$report")
+          done < <(find app/build/test-results -type f \
+            -name 'TEST-com.blaze.player.playback.AutoplayTransitionControllerTest.xml' -print0)
+          if (( ${#autoplay_reports[@]} != 1 )); then
+            printf 'Expected exactly one AutoplayTransitionControllerTest XML report, found %s\n' \
+              "${#autoplay_reports[@]}" >&2
+            printf '%s\n' "${autoplay_reports[@]}" >&2
+            exit 1
+          fi
+          cp -- "${autoplay_reports[0]}" \
+            build/reports/deferred-test-evidence/autoplay/
       - name: Run fake HTTP data-source component test once
         continue-on-error: true
         env:
