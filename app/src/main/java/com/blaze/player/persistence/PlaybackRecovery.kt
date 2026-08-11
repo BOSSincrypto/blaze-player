@@ -77,6 +77,14 @@ object PrivacyRedactor {
     } ?: "redacted-source"
 
     fun metadata(value: String?): String = value.orEmpty()
-        .replace(Regex("(?i)(authorization|cookie|token|password|secret|api[_-]?key)\\s*[:=]\\s*[^,;\\s]+"), "[REDACTED]")
-        .replace(Regex("(?i)(https?://[^\\s?]+)[?][^\\s]+"), "$1")
+        // Header values can contain spaces (for example "Bearer <token>").
+        // Remove the complete value rather than only the first word.
+        .replace(Regex("(?im)(authorization|cookie|set-cookie)\\s*[:=]\\s*[^\\r\\n,;]+"), "$1: [REDACTED]")
+        .replace(Regex("(?im)(token|password|secret|api[_-]?key)\\s*[:=]\\s*[^\\r\\n,;\\s]+"), "$1=[REDACTED]")
+        // Keep a useful scheme/host diagnostic, but never persist query or
+        // fragment material where access tokens commonly live.
+        .replace(Regex("(?i)https?://[^/@\\s]+@"), "https://[REDACTED]@")
+        .replace(Regex("(?i)(https?://[^\\s?#]+)[?#][^\\s]+"), "$1")
+        // Avoid turning local filesystem/provider details into diagnostics.
+        .replace(Regex("(?i)[A-Z]:\\\\(?:[^\\s,;]+)"), "[REDACTED-PATH]")
 }

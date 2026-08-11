@@ -40,4 +40,15 @@ class PlaybackRecoveryTest {
         assertEquals("https://example.test", PrivacyRedactor.source("https://example.test/video.mp4?token=secret"))
         assertTrue(PrivacyRedactor.metadata("Authorization: Bearer secret token=x").contains("[REDACTED]"))
     }
+
+    @Test fun `privacy metadata removes auth query and local path details`() {
+        val safe = PrivacyRedactor.metadata(
+            "Authorization: Bearer top-secret\nurl=https://user:pass@example.test/video.mp4?access_token=secret#/private/path\npath=C:\\Users\\boss\\private.mp4"
+        )
+        assertTrue(!safe.contains("top-secret"))
+        assertTrue(!safe.contains("access_token=secret"))
+        assertTrue(!safe.contains("C:\\Users\\boss"))
+        assertTrue(safe.contains("https://[REDACTED]@example.test/video.mp4"))
+    }
+
 }
