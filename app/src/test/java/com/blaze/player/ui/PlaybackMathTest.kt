@@ -61,6 +61,36 @@ class PlaybackMathTest {
         assertEquals(listOf(1000L), seeks)
     }
 
+    @Test fun `system control failure is isolated and next gesture remains usable`() {
+        var volume = 0.5f
+        var fail = true
+        val failures = mutableListOf<PlaybackGestureHandler.Kind>()
+        val overlays = mutableListOf<String>()
+        val seeks = mutableListOf<Long>()
+        val handler = PlaybackGestureHandler(
+            duration = { 1000L }, position = { 500L }, brightness = { 0.5f }, volume = { volume },
+            seek = seeks::add, setBrightness = {},
+            setVolume = { value -> if (fail) error("route unavailable") else volume = value },
+            showOverlay = overlays::add, clearOverlay = {},
+            onSystemControlFailure = { kind, _ -> failures += kind }
+        )
+
+        handler.down(190f, 100f, 200f, 200f)
+        handler.move(190f, -1000f)
+        handler.up()
+        assertEquals(listOf(PlaybackGestureHandler.Kind.VOLUME), failures)
+        assertEquals(0.5f, volume)
+
+        fail = false
+        handler.down(190f, 100f, 200f, 200f)
+        handler.move(190f, 0f)
+        handler.up()
+        assertEquals(1f, volume)
+
+        // A failed system route cannot consume or dispatch a playback seek.
+        assertTrue(seeks.isEmpty())
+    }
+
     @Test fun `speed exposes exact presets and rejects invalid values`() {
         assertEquals(listOf(.25f, .5f, .75f, 1f, 1.25f, 1.5f, 2f, 3f, 4f), PlaybackSpeed.presets)
         assertNull(PlaybackSpeed.validate(Float.NaN))
