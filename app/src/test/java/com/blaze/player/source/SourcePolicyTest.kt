@@ -11,12 +11,17 @@ class SourcePolicyTest {
         var persistResult = true
         override fun canRead(uri: Uri) = readable
         override fun takePersistableReadPermission(uri: Uri): Boolean { persisted++; return persistResult }
-        override fun openForPlayback(uri: Uri): Boolean { opened++; return readable }
+        override fun openForPlayback(uri: Uri): Boolean {
+            opened++
+            if (!readable) throw SecurityException("persisted grant revoked")
+            return true
+        }
     }
 
     @Test fun `ci deferred durable picker grant restart and revocation component`() {
         val uri = Uri.parse("content://provider/video/ci-deferred")
         val retained = SourceNormalizer.fromPicker(uri, Access()) as SourceResult.Accepted
+        assertTrue(retained.source.persistable)
         val reopened = SourceNormalizer.reopen(retained.source, Access()) as SourceResult.Accepted
         assertEquals(retained.source.identity, reopened.source.identity)
         val revoked = SourceNormalizer.reopen(retained.source, Access(readable = false))

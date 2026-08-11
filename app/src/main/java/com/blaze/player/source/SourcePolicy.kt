@@ -85,14 +85,18 @@ object SourceNormalizer {
 
     /** Rehydrates a durable source identity after process recreation. */
     fun reopen(source: NormalizedSource, access: LocalSourceAccess): SourceResult {
-        if (!source.local || !source.persistable) return SourceResult.Rejected(Reason.NOT_READABLE)
-        val uri = runCatching { Uri.parse(source.identity) }.getOrNull()
-            ?: return SourceResult.Rejected(Reason.EMPTY)
-        if (uri.scheme != "content" || uri.authority.isNullOrBlank()) return SourceResult.Rejected(Reason.EMPTY)
-        if (!runCatching { access.openForPlayback(uri) }.getOrDefault(false)) {
-            return SourceResult.Rejected(Reason.NOT_READABLE)
+        return try {
+            if (!source.local || !source.persistable) return SourceResult.Rejected(Reason.NOT_READABLE)
+            val uri = Uri.parse(source.identity)
+            if (uri.scheme != "content" || uri.authority.isNullOrBlank()) return SourceResult.Rejected(Reason.EMPTY)
+            if (!access.openForPlayback(uri)) {
+                return SourceResult.Rejected(Reason.NOT_READABLE)
+            }
+            SourceResult.Accepted(MediaItem.fromUri(uri), source.copy(uri = uri))
+        } catch (_: RuntimeException) {
+            // Providers may throw when a persisted grant has been revoked.
+            SourceResult.Rejected(Reason.NOT_READABLE)
         }
-        return SourceResult.Accepted(MediaItem.fromUri(uri), source.copy(uri = uri))
     }
 
     fun fromIntent(intent: Intent, access: LocalSourceAccess): SourceResult {
