@@ -66,6 +66,12 @@ release APK, plus lowercase SHA-256 records, machine-readable metadata, and
 reports. These are GitHub Actions artifacts, not GitHub Releases. No signing
 keys or release secrets are used.
 
+The workflow checks provenance against the triggering commit SHA, uses pinned
+action/toolchain revisions, and performs a second pinned build to compare
+functional metadata (package, version, manifest SDK identity, variants, and
+toolchain). APK byte differences caused by packaging timestamps are tolerated;
+functional differences fail the workflow. Artifact retention is 14 days.
+
 The local environment for this project does not include the Android SDK,
 `adb`, or an emulator. Consequently, local static/unit checks can verify
 source-policy wiring and the deterministic policy matrix, but they cannot
