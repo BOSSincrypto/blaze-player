@@ -19,6 +19,7 @@ import com.blaze.player.ui.PlaybackMath
 import com.blaze.player.source.ContentResolverSourceAccess
 import com.blaze.player.source.SourceNormalizer
 import android.content.Intent
+import android.content.ComponentName
 import android.net.Uri
 import android.app.PictureInPictureParams
 import com.google.common.util.concurrent.ListenableFuture
@@ -92,7 +93,7 @@ class MainActivity : ComponentActivity() {
             addView(statusView)
             addView(controls)
         })
-        controllerFuture = MediaController.Builder(this, SessionToken(this, PlaybackService::class.java)).buildAsync()
+        controllerFuture = MediaController.Builder(this, SessionToken(this, ComponentName(this, PlaybackService::class.java))).buildAsync()
         controllerFuture.addListener({ controller = controllerFuture.get().also { c ->
             playerView.player = c
             controls.bind(c)
