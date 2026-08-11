@@ -36,12 +36,7 @@ jobs:
             exit 1
           }
       - name: Run durable picker grant component test once
-        # Gradle's method-name filter is not reliable for Kotlin backtick
-        # names containing spaces on every runner/shell combination. Run the
-        # containing test class once, then record the exact testcase from its
-        # XML report below; this preserves the assertion and avoids a false
-        # zero-test result from the filter.
-        run: ./gradlew --no-daemon testDebugUnitTest --tests 'com.blaze.player.source.SourcePolicyTest'
+        run: ./gradlew --no-daemon testDebugUnitTest --tests 'com.blaze.player.source.SourcePolicyTest.ciDeferredDurablePickerGrantRestartAndRevocationComponent'
       - name: Run fake HTTP data-source component test once
         env:
           GITHUB_ACTIONS: 'true'

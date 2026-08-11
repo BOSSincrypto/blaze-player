@@ -20,7 +20,7 @@ class SourcePolicyTest {
         override fun openForPlayback(uri: Uri): Boolean { opened++; return readable }
     }
 
-    @Test fun `ci deferred durable picker grant restart and revocation component`() {
+    @Test fun ciDeferredDurablePickerGrantRestartAndRevocationComponent() {
         val uri = Uri.parse("content://provider/video/ci-deferred")
         val retainedResult = SourceNormalizer.fromPicker(
             uri,

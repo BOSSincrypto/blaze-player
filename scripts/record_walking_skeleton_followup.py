@@ -12,7 +12,7 @@ OUT = Path(os.environ.get("FOLLOWUP_EVIDENCE", "build/reports/walking-skeleton-f
 HTTP = Path(os.environ.get("HTTP_MATRIX_REPORT", "build/reports/http-source-matrix.json"))
 
 CASES = {
-    "VAL-PLAYER-002": ("com.blaze.player.source.SourcePolicyTest", "ci deferred durable picker grant restart and revocation component"),
+    "VAL-PLAYER-002": ("com.blaze.player.source.SourcePolicyTest", "ciDeferredDurablePickerGrantRestartAndRevocationComponent"),
     "VAL-PLAYER-008": ("com.blaze.player.playback.AutoplayTransitionControllerTest", "ci deferred autoplay service transition component"),
 }
 
