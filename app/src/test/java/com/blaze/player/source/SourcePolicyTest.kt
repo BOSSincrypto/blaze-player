@@ -58,6 +58,19 @@ class SourcePolicyTest {
         assertEquals(uri.toString(), recreated.source.identity)
     }
 
+    @Test fun `persisted local identity reopens regardless of URI scheme case`() {
+        val uri = Uri.parse("CONTENT://provider/video/1")
+        val retained = SourceNormalizer.fromPicker(uri, Access(), pickerGrantFlags)
+        assertTrue("readable picker URI must be accepted: $retained", retained is SourceResult.Accepted)
+
+        val reopened = SourceNormalizer.reopen(
+            (retained as SourceResult.Accepted).source,
+            Access()
+        )
+        assertTrue("persisted readable URI must reopen: $reopened", reopened is SourceResult.Accepted)
+        assertEquals(uri.toString(), (reopened as SourceResult.Accepted).source.identity)
+    }
+
     @Test fun `revoked persisted grant fails safely during playback preparation`() {
         val uri = Uri.parse("content://provider/video/1")
         val sourceResult = SourceNormalizer.fromPicker(uri, Access(), pickerGrantFlags)

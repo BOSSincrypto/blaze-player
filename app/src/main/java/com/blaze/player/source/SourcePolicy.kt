@@ -88,7 +88,12 @@ object SourceNormalizer {
         if (!source.local || !source.persistable) return SourceResult.Rejected(Reason.NOT_READABLE)
         val uri = runCatching { Uri.parse(source.identity) }.getOrNull()
             ?: return SourceResult.Rejected(Reason.EMPTY)
-        if (uri.scheme != "content" || uri.authority.isNullOrBlank()) return SourceResult.Rejected(Reason.EMPTY)
+        // Uri scheme matching is case-insensitive. Picker identities are persisted
+        // as strings, so a provider or canonicalizer may rehydrate CONTENT:// even
+        // though normalizeLocal accepted it using the same URI semantics.
+        if (!uri.scheme.equals("content", ignoreCase = true) || uri.authority.isNullOrBlank()) {
+            return SourceResult.Rejected(Reason.EMPTY)
+        }
 
         // A revoked provider grant may surface as either false or a provider
         // exception. Limit the exception conversion to the access check: a
