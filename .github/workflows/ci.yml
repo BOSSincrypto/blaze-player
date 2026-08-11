@@ -30,7 +30,7 @@ jobs:
           java-version: '17'
           cache: gradle
       - name: Set up Android SDK
-        uses: android-actions/setup-android@e9fbacdec3bb3b6036605a3e6f7995d66773a8c6
+        uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407
       - name: Install pinned API 35 tooling
         run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
       - name: Verify wrapper and toolchain
