@@ -45,7 +45,7 @@ class PlaybackRecoveryTest {
 
     @Test fun `privacy redaction removes local details and URL secrets`() {
         assertEquals("redacted-source", PrivacyRedactor.source("content://private.provider/user/path/video.mp4"))
-        assertEquals("https://example.test", PrivacyRedactor.source("https://example.test/video.mp4?token=secret"))
+        assertEquals("redacted-source", PrivacyRedactor.source("https://example.test/video.mp4?token=secret"))
         assertTrue(PrivacyRedactor.metadata("Authorization: Bearer secret token=x").contains("[REDACTED]"))
     }
 
