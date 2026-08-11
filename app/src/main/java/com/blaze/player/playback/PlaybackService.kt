@@ -221,7 +221,7 @@ class PlaybackService : MediaSessionService() {
                     // Reconnects or duplicate intent delivery must not reprepare the
                     // authoritative item. A genuinely new selection still replaces it.
                     if (item != null && (customCommand == retryPreparation || !(item.mediaId == preparedMediaId &&
-                                session.player.currentMediaItem?.mediaId == item.mediaId)) {
+                                session.player.currentMediaItem?.mediaId == item.mediaId))) {
                         preparedMediaId = item.mediaId
                         val effects = autoplayTransitions.request(item.mediaId, context, retry = customCommand == retryPreparation)
                         if (effects.contains(AutoplayTransitionController.Effect.PREPARE)) {
