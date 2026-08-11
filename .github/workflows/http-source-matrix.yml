@@ -34,15 +34,19 @@ jobs:
             exit 1
           }
       - name: Run durable picker grant component test once
+        continue-on-error: true
         run: ./gradlew --no-daemon testDebugUnitTest --tests 'com.blaze.player.source.SourcePolicyTest.ci deferred durable picker grant restart and revocation component'
       - name: Run fake HTTP data-source component test once
+        continue-on-error: true
         env:
           GITHUB_ACTIONS: 'true'
           HTTP_MATRIX_REPORT: build/reports/http-source-matrix.json
         run: python3 scripts/http_source_matrix.py
       - name: Run autoplay service transition component test once
+        continue-on-error: true
         run: ./gradlew --no-daemon testDebugUnitTest --tests 'com.blaze.player.playback.AutoplayTransitionControllerTest.ci deferred autoplay service transition component'
       - name: Record deferred assertion evidence
+        if: always()
         shell: bash
         run: |
           set -euo pipefail

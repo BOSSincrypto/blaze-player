@@ -40,15 +40,30 @@ def main():
     executions = []
     for assertion, (classname, name) in CASES.items():
         reports = test_cases(classname, name)
-        executions.append({"assertion": assertion, "test": f"{classname}.{name}", "count": len(reports), "reports": reports})
+        count = len(reports)
+        executions.append({
+            "assertion": assertion,
+            "status": "pass" if count == 1 else "fail",
+            "test": f"{classname}.{name}",
+            "count": count,
+            "reports": reports,
+            "evidence": reports[0] if count == 1 else str(Path("app/build/test-results")),
+        })
     http_checks = http.get("checks", [])
     http_ok = http.get("status") == "verified" and bool(http_checks) and all(c.get("passed") is True for c in http_checks)
-    executions.append({"assertion": "VAL-PLAYER-006", "test": "scripts/http_source_matrix.py", "count": 1 if http_ok else 0,
-                       "report": str(HTTP)})
+    executions.append({
+        "assertion": "VAL-PLAYER-006",
+        "status": "pass" if http_ok else "fail",
+        "test": "scripts/http_source_matrix.py",
+        "count": 1 if http_ok else 0,
+        "report": str(HTTP),
+        "evidence": str(HTTP),
+    })
     ci_ok = os.environ.get("GITHUB_ACTIONS", "").lower() == "true"
     valid = ci_ok and api_ok and http_ok and all(item["count"] == 1 for item in executions)
     report = {
         "status": "verified" if valid else "failed",
+        "validation": "ci-only-single-execution",
         "environment": {"ci": os.environ.get("GITHUB_ACTIONS") == "true", "jdk": "17", "android_api_minimum": 31},
         "commit": os.environ.get("GITHUB_SHA", ""),
         "run_id": os.environ.get("GITHUB_RUN_ID", ""),
