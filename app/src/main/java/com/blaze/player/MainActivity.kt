@@ -9,6 +9,7 @@ import androidx.activity.ComponentActivity
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.media3.common.Player
 import androidx.media3.common.PlaybackException
+import androidx.media3.common.util.UnstableApi
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
 import androidx.media3.ui.PlayerView
@@ -119,6 +120,7 @@ class MainActivity : ComponentActivity() {
         } }, androidx.core.content.ContextCompat.getMainExecutor(this))
     }
 
+    @OptIn(UnstableApi::class)
     private fun preparePickerUri(uri: Uri) {
         val access = ContentResolverSourceAccess(contentResolver)
         val result = SourceNormalizer.fromPicker(
@@ -147,6 +149,7 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    @OptIn(UnstableApi::class)
     private fun handleIntent(input: Intent?, c: MediaController) {
         if (input == null || (input.action != Intent.ACTION_VIEW && input.action != Intent.ACTION_SEND)) return
         val intentKey = listOf(input.action, input.data?.toString(), input.getParcelableExtra<Uri>(Intent.EXTRA_STREAM)?.toString(), input.getStringExtra(Intent.EXTRA_TEXT)).joinToString("|")
@@ -177,6 +180,7 @@ class MainActivity : ComponentActivity() {
         statusView.setOnClickListener(null)
     }
 
+    @OptIn(UnstableApi::class)
     private fun showError(error: com.blaze.player.playback.PlaybackError) {
         statusView.text = if (error.canRetry) {
             "${error.title}: ${error.message} Tap to retry."

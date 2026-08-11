@@ -8,6 +8,7 @@ import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.common.Timeline
+import androidx.media3.common.util.UnstableApi
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
@@ -48,6 +49,7 @@ class PlaybackService : MediaSessionService() {
         val performance = PerformanceInstrumentation()
 
         /** Decode the Bundleable payload used by custom session commands. */
+        @OptIn(UnstableApi::class)
         internal fun mediaItemFromArgs(args: Bundle): MediaItem? =
             args.getBundle(MEDIA_ITEM_ARGUMENT_KEY)?.let { bundle ->
                 runCatching { MediaItem.fromBundle(bundle) }.getOrNull()
@@ -92,6 +94,7 @@ class PlaybackService : MediaSessionService() {
             }
         }
 
+        @OptIn(UnstableApi::class)
         override fun onPositionDiscontinuity(reason: Int) {
             if (reason == Player.DISCONTINUITY_REASON_SEEK) checkpoint(false)
             if (reason == Player.DISCONTINUITY_REASON_SEEK && isHttpSource()) {
@@ -199,6 +202,7 @@ class PlaybackService : MediaSessionService() {
         }
         session = synchronized(singletonLock) {
             sharedSession ?: MediaSession.Builder(this, player).setCallback(object : MediaSession.Callback {
+            @OptIn(UnstableApi::class)
             override fun onConnect(session: MediaSession, controller: MediaSession.ControllerInfo): MediaSession.ConnectionResult {
                 val playerCommands = Player.Commands.Builder()
                     .add(Player.COMMAND_PLAY_PAUSE)
