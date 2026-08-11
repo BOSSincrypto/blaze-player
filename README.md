@@ -106,3 +106,13 @@ claiming validation.
 
 Media URLs are user input. Do not log or persist URL query values, fragments,
 userinfo, tokens, cookies, authorization headers, or private local paths.
+
+## Cross-area acceptance policy
+
+The source, speed, history/resume, lifecycle, singleton, privacy,
+unsupported-scope, and CI rules are canonical across the app and are exercised
+by `CrossAreaContractTest`. The CI workflow also runs
+`scripts/verify_cross_area_contract.py`, which fails closed when the required
+`VAL-CROSS-001` through `VAL-CROSS-020` inventory, workflow gate, or policy
+documentation diverges. Each validation assertion has one status and evidence
+slot; missing Android device evidence remains `unverified`, never `pass`.

@@ -39,6 +39,8 @@ jobs:
         run: ./gradlew --no-daemon test lint assembleDebug assembleRelease
       - name: Enforce contract coverage
         run: python3 scripts/verify_contract_coverage.py
+      - name: Enforce cross-area policy convergence
+        run: python3 scripts/verify_cross_area_contract.py
       - name: Validate exact APKs and generate provenance
         env:
           GRADLE_VERSION: '8.11.1'
