@@ -28,7 +28,7 @@ import com.blaze.player.playback.NotificationPermissionPolicy
 import com.blaze.player.playback.NotificationPermissionState
 import com.blaze.player.playback.NotificationPermissionStore
 
-@OptIn(UnstableApi::class)
+@UnstableApi
 class MainActivity : ComponentActivity() {
     private lateinit var notificationPermissionStore: NotificationPermissionStore
     private val notificationPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->

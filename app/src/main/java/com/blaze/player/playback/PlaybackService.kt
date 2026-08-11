@@ -31,7 +31,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-@OptIn(UnstableApi::class)
+@UnstableApi
 class PlaybackService : MediaSessionService() {
     companion object {
         const val NOTIFICATION_CHANNEL_ID = "blaze_playback"

@@ -31,7 +31,7 @@ import org.robolectric.RobolectricTestRunner
 
 /** Cross-area acceptance tests keep the canonical policies from drifting apart. */
 @RunWith(RobolectricTestRunner::class)
-@OptIn(UnstableApi::class)
+@UnstableApi
 class CrossAreaContractTest {
     private val unreadable = object : LocalSourceAccess {
         override fun canRead(uri: Uri) = false
