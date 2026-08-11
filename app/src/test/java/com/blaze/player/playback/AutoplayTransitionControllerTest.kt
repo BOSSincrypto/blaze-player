@@ -11,6 +11,16 @@ class AutoplayTransitionControllerTest {
         assertEquals(emptyList<AutoplayTransitionController.Effect>(), controller.prepared("video"))
     }
 
+    @Test fun `ci deferred autoplay service transition component`() {
+        listOf(AutoplayContext.HISTORY, AutoplayContext.PLAYLIST_START, AutoplayContext.PLAYLIST_NEXT).forEach(::assertOnePlay)
+        val failed = AutoplayTransitionController()
+        failed.request("failed", AutoplayContext.HISTORY)
+        failed.failed("failed")
+        assertEquals(emptyList<AutoplayTransitionController.Effect>(), failed.prepared("failed"))
+        assertEquals(listOf(AutoplayTransitionController.Effect.PREPARE), failed.request("failed", AutoplayContext.RETRY, retry = true))
+        assertEquals(listOf(AutoplayTransitionController.Effect.PLAY), failed.prepared("failed"))
+    }
+
     @Test fun `history and playlist transitions autoplay once after preparation`() {
         listOf(AutoplayContext.HISTORY, AutoplayContext.PLAYLIST_START, AutoplayContext.PLAYLIST_NEXT).forEach(::assertOnePlay)
     }

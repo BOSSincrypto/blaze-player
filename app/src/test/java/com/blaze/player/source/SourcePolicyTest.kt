@@ -14,6 +14,15 @@ class SourcePolicyTest {
         override fun openForPlayback(uri: Uri): Boolean { opened++; return readable }
     }
 
+    @Test fun `ci deferred durable picker grant restart and revocation component`() {
+        val uri = Uri.parse("content://provider/video/ci-deferred")
+        val retained = SourceNormalizer.fromPicker(uri, Access()) as SourceResult.Accepted
+        val reopened = SourceNormalizer.reopen(retained.source, Access()) as SourceResult.Accepted
+        assertEquals(retained.source.identity, reopened.source.identity)
+        val revoked = SourceNormalizer.reopen(retained.source, Access(readable = false))
+        assertEquals(Reason.NOT_READABLE, (revoked as SourceResult.Rejected).reason)
+    }
+
     @Test fun `local content is accepted and grant retained`() {
         val access = Access(); val result = SourceNormalizer.fromPicker(Uri.parse("content://provider/video/1"), access)
         assertTrue(result is SourceResult.Accepted); assertEquals(1, access.persisted)
