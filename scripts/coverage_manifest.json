@@ -1,0 +1,16 @@
+{
+  "version": 1,
+  "required": {
+    "url": ["SourcePolicyTest"],
+    "speed": ["PlaybackSpeedStoreTest", "PlaybackMathTest"],
+    "intent": ["SourcePolicyTest"],
+    "error": ["PlaybackStateTest", "SourcePolicyTest"],
+    "playlist": ["PlaybackRepositoryTest", "PlaybackHistoryPolicyTest"],
+    "room": ["PlaybackRepositoryTest"],
+    "datastore": ["PlaybackSpeedStoreTest", "PlaybackRecoveryTest"],
+    "service": ["AutoplayTransitionControllerTest", "AutoplayPolicyTest"],
+    "lifecycle": ["PlaybackRecoveryTest", "AutoplayPolicyTest"],
+    "gesture": ["PlaybackMathTest"],
+    "persistence": ["PlaybackRepositoryTest", "PlaybackRecoveryTest", "PlaybackHistoryPolicyTest"]
+  }
+}
