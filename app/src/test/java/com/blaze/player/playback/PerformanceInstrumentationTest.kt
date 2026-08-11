@@ -8,7 +8,7 @@ import org.junit.Test
 class PerformanceInstrumentationTest {
     @Test fun `records dispatch acknowledgement frame and HTTP stages independently`() {
         val metrics = PerformanceInstrumentation()
-        val fixtureUrl = listOf("https", "example.test", "video.mp4").joinToString("/", ".", "://") + "?query-value=placeholder"
+        val fixtureUrl = "https://example.test/video.mp4?query-value=placeholder"
         PerformanceStage.entries.forEachIndexed { index, stage -> metrics.record(stage, index.toLong(), fixtureUrl) }
 
         assertEquals(PerformanceStage.entries.toList(), metrics.snapshot().map { it.stage })
@@ -32,7 +32,7 @@ class PerformanceInstrumentationTest {
 
     @Test fun `redacts local sources credentials query and fragments`() {
         assertEquals("content://redacted", PerformanceInstrumentation.redactSource("content://local/video.mp4"))
-        val safeUrl = listOf("https", "example.test", "a.mp4").joinToString("://", ".", "")
+        val safeUrl = "https://example.test/a.mp4"
         val sourceWithSecrets = safeUrl + "?query-value=placeholder#fragment"
         assertEquals(safeUrl, PerformanceInstrumentation.redactSource(sourceWithSecrets))
         assertEquals("redacted-source", PerformanceInstrumentation.redactSource("not a uri"))

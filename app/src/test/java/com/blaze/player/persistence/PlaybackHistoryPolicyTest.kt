@@ -10,7 +10,9 @@ class PlaybackHistoryPolicyTest {
         assertTrue(PlaybackRepository.isCompleted(70_000, 100_000))
         assertTrue(PlaybackRepository.isCompleted(95_000, 100_000))
         assertFalse(PlaybackRepository.isCompleted(69_999, 100_000))
-        assertFalse(PlaybackRepository.isCompleted(94_999, 100_000))
+        // The canonical policy completes when either the final 30 seconds
+        // remain or the position reaches 95%.
+        assertTrue(PlaybackRepository.isCompleted(94_999, 100_000))
     }
 
     @Test fun `unknown and live durations never infer completion`() {
