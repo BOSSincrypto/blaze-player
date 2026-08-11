@@ -22,6 +22,7 @@ class PlaybackService : MediaSessionService() {
     }
     private lateinit var session: MediaSession
     private var autoplayPending = false
+    private var preparedMediaId: String? = null
 
     override fun onCreate() {
         super.onCreate()
@@ -29,7 +30,7 @@ class PlaybackService : MediaSessionService() {
             sharedPlayer = it
             it.addListener(object : Player.Listener {
                 override fun onPlaybackStateChanged(state: Int) {
-                    if (state == Player.STATE_READY && autoplayPending) {
+                    if (state == Player.STATE_READY && autoplayPending && preparedMediaId == it.currentMediaItem?.mediaId) {
                         autoplayPending = false
                         it.play()
                     }
@@ -45,8 +46,9 @@ class PlaybackService : MediaSessionService() {
             override fun onCustomCommand(session: MediaSession, controller: MediaSession.ControllerInfo, customCommand: SessionCommand, args: Bundle): ListenableFuture<SessionResult> {
                 if (customCommand == prepareAndAutoplay) {
                     val item = args.getParcelable<MediaItem>("media_item")
-                    if (item != null && session.player.currentMediaItem?.mediaId != item.mediaId) {
+                    if (item != null && item.mediaId != preparedMediaId) {
                         autoplayPending = true
+                        preparedMediaId = item.mediaId
                         session.player.setMediaItem(item)
                         session.player.prepare()
                     }

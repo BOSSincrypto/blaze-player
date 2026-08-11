@@ -9,14 +9,23 @@ class PlaybackMathTest {
         assertEquals(0f, PlaybackMath.progress(-10, 100), 0f)
         assertEquals(1f, PlaybackMath.progress(200, 100), 0f)
         assertTrue(PlaybackMath.progress(50, -1).isFinite())
+        assertEquals(0L, PlaybackMath.position(-10, 100))
+        assertEquals(100L, PlaybackMath.position(200, 100))
     }
 
     @Test fun `seek targets clamp and coalescer dispatches final only`() {
         assertEquals(0L, PlaybackMath.seekTarget(-1f, 1000))
         assertEquals(1000L, PlaybackMath.seekTarget(2f, 1000))
+        assertEquals(0L, PlaybackMath.seekTarget(Float.NaN, 1000))
         val calls = mutableListOf<Long>()
         SeekCoalescer(calls::add).also { it.offer(10); it.offer(20); it.release() }
         assertEquals(listOf(20L), calls)
+    }
+
+    @Test fun `vertical gesture levels are finite and bounded`() {
+        assertEquals(1f, PlaybackMath.verticalLevel(-1000f, 100f))
+        assertEquals(0f, PlaybackMath.verticalLevel(1000f, 100f))
+        assertTrue(PlaybackMath.verticalLevel(Float.NaN, 0f).isFinite())
     }
 
     @Test fun `speed exposes exact presets and rejects invalid values`() {

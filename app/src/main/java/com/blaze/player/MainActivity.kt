@@ -19,6 +19,7 @@ class MainActivity : ComponentActivity() {
     private lateinit var playerView: PlayerView
     private lateinit var controllerFuture: ListenableFuture<MediaController>
     private var controller: MediaController? = null
+    private var lastIntentKey: String? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -39,6 +40,9 @@ class MainActivity : ComponentActivity() {
 
     private fun handleIntent(input: Intent?, c: MediaController) {
         if (input == null || (input.action != Intent.ACTION_VIEW && input.action != Intent.ACTION_SEND)) return
+        val intentKey = listOf(input.action, input.data?.toString(), input.getParcelableExtra<Uri>(Intent.EXTRA_STREAM)?.toString(), input.getStringExtra(Intent.EXTRA_TEXT)).joinToString("|")
+        if (intentKey == lastIntentKey) return
+        lastIntentKey = intentKey
         val result = SourceNormalizer.fromIntent(input, object : LocalSourceAccess {
             override fun canRead(uri: Uri) = true
             override fun takePersistableReadPermission(uri: Uri) = false
@@ -48,6 +52,12 @@ class MainActivity : ComponentActivity() {
                 putParcelable("media_item", result.mediaItem)
             })
         }
+    }
+
+    override fun onNewIntent(intent: Intent?) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        controller?.let { handleIntent(intent, it) }
     }
 
     override fun onDestroy() {
