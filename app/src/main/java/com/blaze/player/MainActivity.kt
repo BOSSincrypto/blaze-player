@@ -28,6 +28,7 @@ import com.blaze.player.playback.NotificationPermissionPolicy
 import com.blaze.player.playback.NotificationPermissionState
 import com.blaze.player.playback.NotificationPermissionStore
 
+@OptIn(UnstableApi::class)
 class MainActivity : ComponentActivity() {
     private lateinit var notificationPermissionStore: NotificationPermissionStore
     private val notificationPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
@@ -120,7 +121,6 @@ class MainActivity : ComponentActivity() {
         } }, androidx.core.content.ContextCompat.getMainExecutor(this))
     }
 
-    @OptIn(UnstableApi::class)
     private fun preparePickerUri(uri: Uri) {
         val access = ContentResolverSourceAccess(contentResolver)
         val result = SourceNormalizer.fromPicker(
@@ -149,7 +149,6 @@ class MainActivity : ComponentActivity() {
         }
     }
 
-    @OptIn(UnstableApi::class)
     private fun handleIntent(input: Intent?, c: MediaController) {
         if (input == null || (input.action != Intent.ACTION_VIEW && input.action != Intent.ACTION_SEND)) return
         val intentKey = listOf(input.action, input.data?.toString(), input.getParcelableExtra<Uri>(Intent.EXTRA_STREAM)?.toString(), input.getStringExtra(Intent.EXTRA_TEXT)).joinToString("|")
@@ -180,7 +179,6 @@ class MainActivity : ComponentActivity() {
         statusView.setOnClickListener(null)
     }
 
-    @OptIn(UnstableApi::class)
     private fun showError(error: com.blaze.player.playback.PlaybackError) {
         statusView.text = if (error.canRetry) {
             "${error.title}: ${error.message} Tap to retry."

@@ -31,6 +31,7 @@ import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
+@OptIn(UnstableApi::class)
 class PlaybackService : MediaSessionService() {
     companion object {
         const val NOTIFICATION_CHANNEL_ID = "blaze_playback"
@@ -49,7 +50,6 @@ class PlaybackService : MediaSessionService() {
         val performance = PerformanceInstrumentation()
 
         /** Decode the Bundleable payload used by custom session commands. */
-        @OptIn(UnstableApi::class)
         internal fun mediaItemFromArgs(args: Bundle): MediaItem? =
             args.getBundle(MEDIA_ITEM_ARGUMENT_KEY)?.let { bundle ->
                 runCatching { MediaItem.fromBundle(bundle) }.getOrNull()
@@ -94,7 +94,6 @@ class PlaybackService : MediaSessionService() {
             }
         }
 
-        @OptIn(UnstableApi::class)
         override fun onPositionDiscontinuity(reason: Int) {
             if (reason == Player.DISCONTINUITY_REASON_SEEK) checkpoint(false)
             if (reason == Player.DISCONTINUITY_REASON_SEEK && isHttpSource()) {
@@ -202,7 +201,6 @@ class PlaybackService : MediaSessionService() {
         }
         session = synchronized(singletonLock) {
             sharedSession ?: MediaSession.Builder(this, player).setCallback(object : MediaSession.Callback {
-            @OptIn(UnstableApi::class)
             override fun onConnect(session: MediaSession, controller: MediaSession.ControllerInfo): MediaSession.ConnectionResult {
                 val playerCommands = Player.Commands.Builder()
                     .add(Player.COMMAND_PLAY_PAUSE)

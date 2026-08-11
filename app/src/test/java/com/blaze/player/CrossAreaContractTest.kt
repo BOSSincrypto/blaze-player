@@ -21,6 +21,7 @@ import com.blaze.player.source.LocalSourceAccess
 import android.net.Uri
 import android.os.Bundle
 import androidx.media3.common.MediaItem
+import androidx.media3.common.util.UnstableApi
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -30,6 +31,7 @@ import org.robolectric.RobolectricTestRunner
 
 /** Cross-area acceptance tests keep the canonical policies from drifting apart. */
 @RunWith(RobolectricTestRunner::class)
+@OptIn(UnstableApi::class)
 class CrossAreaContractTest {
     private val unreadable = object : LocalSourceAccess {
         override fun canRead(uri: Uri) = false
