@@ -74,6 +74,14 @@ Real pause/play and seek p95, first-frame and HTTP-seek latency, PiP,
 screen-off audio, notification/hardware controls, and codec/decoder behavior
 remain **unverified** until a CI/device validation run provides evidence.
 
+The single CI-gated fake HTTP matrix is defined in
+`.github/workflows/http-source-matrix.yml`. After the required Android gate it
+checks bounded redirects, byte ranges, authentication failures without
+unauthorized retries, and private-media cache behavior against a deterministic
+fake server. It is intentionally not a local retry. If CI or the Android SDK
+is unavailable, its report records `blocked` and `unverified` rather than
+claiming validation.
+
 ## Privacy
 
 Media URLs are user input. Do not log or persist URL query values, fragments,
