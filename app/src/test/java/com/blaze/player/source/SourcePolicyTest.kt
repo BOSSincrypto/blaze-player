@@ -1,10 +1,13 @@
 package com.blaze.player.source
 
 import android.net.Uri
+import android.content.Intent
 import org.junit.Assert.*
 import org.junit.Test
 
 class SourcePolicyTest {
+    private val pickerGrantFlags = Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION
+
     private class Access(private val readable: Boolean = true) : LocalSourceAccess {
         var persisted = 0
         var opened = 0
@@ -16,7 +19,13 @@ class SourcePolicyTest {
 
     @Test fun `ci deferred durable picker grant restart and revocation component`() {
         val uri = Uri.parse("content://provider/video/ci-deferred")
-        val retained = SourceNormalizer.fromPicker(uri, Access()) as SourceResult.Accepted
+        val retainedResult = SourceNormalizer.fromPicker(
+            uri,
+            Access(),
+            Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION
+        )
+        assertTrue("readable picker URI must be accepted: $retainedResult", retainedResult is SourceResult.Accepted)
+        val retained = retainedResult as SourceResult.Accepted
         assertTrue(retained.source.persistable)
         val reopened = SourceNormalizer.reopen(retained.source, Access()) as SourceResult.Accepted
         assertEquals(retained.source.identity, reopened.source.identity)
@@ -25,21 +34,24 @@ class SourcePolicyTest {
     }
 
     @Test fun `local content is accepted and grant retained`() {
-        val access = Access(); val result = SourceNormalizer.fromPicker(Uri.parse("content://provider/video/1"), access)
+        val access = Access(); val result = SourceNormalizer.fromPicker(Uri.parse("content://provider/video/1"), access, pickerGrantFlags)
+        assertTrue("readable content URI must be accepted: $result", result is SourceResult.Accepted)
         assertTrue(result is SourceResult.Accepted); assertEquals(1, access.persisted)
         assertTrue((result as SourceResult.Accepted).source.persistable)
     }
 
     @Test fun `non persistable local grant is accepted without durable claim`() {
         val access = Access().also { it.persistResult = false }
-        val result = SourceNormalizer.fromPicker(Uri.parse("content://provider/video/1"), access)
+        val result = SourceNormalizer.fromPicker(Uri.parse("content://provider/video/1"), access, Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION)
         assertTrue(result is SourceResult.Accepted)
         assertFalse((result as SourceResult.Accepted).source.persistable)
     }
 
     @Test fun `persisted local identity and media id survive recreation`() {
         val uri = Uri.parse("content://provider/video/1")
-        val first = SourceNormalizer.fromPicker(uri, Access()) as SourceResult.Accepted
+        val firstResult = SourceNormalizer.fromPicker(uri, Access(), pickerGrantFlags)
+        assertTrue("readable content URI must be accepted: $firstResult", firstResult is SourceResult.Accepted)
+        val first = firstResult as SourceResult.Accepted
         val recreated = SourceNormalizer.reopen(first.source, Access()) as SourceResult.Accepted
         assertEquals(first.source.identity, recreated.source.identity)
         assertEquals(first.mediaItem.mediaId, recreated.mediaItem.mediaId)
@@ -48,7 +60,9 @@ class SourcePolicyTest {
 
     @Test fun `revoked persisted grant fails safely during playback preparation`() {
         val uri = Uri.parse("content://provider/video/1")
-        val source = (SourceNormalizer.fromPicker(uri, Access()) as SourceResult.Accepted).source
+        val sourceResult = SourceNormalizer.fromPicker(uri, Access(), pickerGrantFlags)
+        assertTrue("readable content URI must be accepted: $sourceResult", sourceResult is SourceResult.Accepted)
+        val source = (sourceResult as SourceResult.Accepted).source
         val revoked = Access(readable = false)
         val result = SourceNormalizer.reopen(source, revoked)
         assertEquals(Reason.NOT_READABLE, (result as SourceResult.Rejected).reason)
@@ -57,7 +71,9 @@ class SourcePolicyTest {
 
     @Test fun `missing grant never claims durable reopen`() {
         val uri = Uri.parse("content://provider/video/1")
-        val source = (SourceNormalizer.fromPicker(uri, Access().also { it.persistResult = false }) as SourceResult.Accepted).source
+        val sourceResult = SourceNormalizer.fromPicker(uri, Access().also { it.persistResult = false }, pickerGrantFlags)
+        assertTrue("readable content URI must be accepted: $sourceResult", sourceResult is SourceResult.Accepted)
+        val source = (sourceResult as SourceResult.Accepted).source
         assertFalse(source.persistable)
         assertEquals(Reason.NOT_READABLE, (SourceNormalizer.reopen(source, Access(false)) as SourceResult.Rejected).reason)
     }
