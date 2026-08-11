@@ -15,7 +15,7 @@ enum class Reason {
     ADAPTIVE_NOT_SUPPORTED, NOT_READABLE, UNSUPPORTED_MEDIA
 }
 
-data class NormalizedSource(val uri: Uri, val local: Boolean)
+data class NormalizedSource(val uri: Uri, val local: Boolean, val persistable: Boolean = false)
 
 interface LocalSourceAccess {
     fun canRead(uri: Uri): Boolean
@@ -56,8 +56,8 @@ object SourceNormalizer {
         if (!readable) return SourceResult.Rejected(Reason.NOT_READABLE)
         // Providers are allowed to return a non-persistable grant. Playback remains
         // valid for this handoff, but we must not claim durable reopen in that case.
-        runCatching { access.takePersistableReadPermission(uri) }
-        return SourceResult.Accepted(MediaItem.fromUri(uri), NormalizedSource(uri, local = true))
+        val persistable = runCatching { access.takePersistableReadPermission(uri) }.getOrDefault(false)
+        return SourceResult.Accepted(MediaItem.fromUri(uri), NormalizedSource(uri, local = true, persistable = persistable))
     }
 
     private fun normalizeRemote(uri: Uri): SourceResult {

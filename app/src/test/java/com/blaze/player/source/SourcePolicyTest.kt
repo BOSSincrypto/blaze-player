@@ -7,13 +7,22 @@ import org.junit.Test
 class SourcePolicyTest {
     private class Access(private val readable: Boolean = true) : LocalSourceAccess {
         var persisted = 0
+        var persistResult = true
         override fun canRead(uri: Uri) = readable
-        override fun takePersistableReadPermission(uri: Uri): Boolean { persisted++; return true }
+        override fun takePersistableReadPermission(uri: Uri): Boolean { persisted++; return persistResult }
     }
 
     @Test fun `local content is accepted and grant retained`() {
         val access = Access(); val result = SourceNormalizer.fromPicker(Uri.parse("content://provider/video/1"), access)
         assertTrue(result is SourceResult.Accepted); assertEquals(1, access.persisted)
+        assertTrue((result as SourceResult.Accepted).source.persistable)
+    }
+
+    @Test fun `non persistable local grant is accepted without durable claim`() {
+        val access = Access().also { it.persistResult = false }
+        val result = SourceNormalizer.fromPicker(Uri.parse("content://provider/video/1"), access)
+        assertTrue(result is SourceResult.Accepted)
+        assertFalse((result as SourceResult.Accepted).source.persistable)
     }
 
     @Test fun `intent candidates converge to one accepted source`() {
@@ -25,6 +34,9 @@ class SourcePolicyTest {
         assertEquals(Reason.UNSUPPORTED_SCHEME, (SourceNormalizer.normalize(Uri.parse("file:///tmp/a.mp4"), Access()) as SourceResult.Rejected).reason)
         assertEquals(Reason.MALFORMED_URL, (SourceNormalizer.normalize(Uri.parse("https://example.test/%%%"), Access()) as SourceResult.Rejected).reason)
         assertEquals(Reason.ADAPTIVE_NOT_SUPPORTED, (SourceNormalizer.normalize(Uri.parse("https://example.test/live.m3u8"), Access()) as SourceResult.Rejected).reason)
+        val credentialUrl = Uri.parse("https://user" + ":" + "pass@example.test/a.mp4")
+        assertEquals(Reason.CREDENTIALS_NOT_ALLOWED, (SourceNormalizer.normalize(credentialUrl, Access()) as SourceResult.Rejected).reason)
+        assertEquals(Reason.UNSUPPORTED_MEDIA, (SourceNormalizer.normalize(Uri.parse("https://example.test/movie.mp4?drm=widevine"), Access()) as SourceResult.Rejected).reason)
     }
 
     @Test fun `redirect policy blocks downgrade and credentials`() {
@@ -38,5 +50,6 @@ class SourcePolicyTest {
         assertEquals(NetworkFailure.REDIRECT_REJECTED, NetworkResponsePolicy.classify(302, false))
         assertEquals(NetworkFailure.RANGE_UNSUPPORTED, NetworkResponsePolicy.classify(200, true, false))
         assertNull(NetworkResponsePolicy.classify(206, true, true))
+        assertEquals(NetworkFailure.HTTP_ERROR, NetworkResponsePolicy.classify(500, false, false))
     }
 }

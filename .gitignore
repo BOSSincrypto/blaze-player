@@ -1,0 +1,5 @@
+.gradle/
+.firecrawl/
+local.properties
+build/
+app/build/
