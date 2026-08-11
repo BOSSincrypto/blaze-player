@@ -2,6 +2,8 @@ package com.blaze.player
 
 import android.os.Bundle
 import android.view.ViewGroup
+import android.view.MotionEvent
+import android.media.AudioManager
 import androidx.activity.ComponentActivity
 import androidx.media3.common.Player
 import androidx.media3.common.PlaybackException
@@ -10,6 +12,8 @@ import androidx.media3.session.SessionToken
 import androidx.media3.ui.PlayerView
 import com.blaze.player.playback.PlaybackService
 import com.blaze.player.ui.PlaybackControls
+import com.blaze.player.ui.PlaybackGestureHandler
+import com.blaze.player.ui.PlaybackMath
 import com.blaze.player.source.LocalSourceAccess
 import com.blaze.player.source.SourceNormalizer
 import android.content.Intent
@@ -23,6 +27,8 @@ class MainActivity : ComponentActivity() {
     private var lastIntentKey: String? = null
     private var lastMediaItem: androidx.media3.common.MediaItem? = null
     private lateinit var statusView: android.widget.TextView
+    private lateinit var gestures: PlaybackGestureHandler
+    private val audioManager by lazy { getSystemService(AudioManager::class.java) }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -31,6 +37,31 @@ class MainActivity : ComponentActivity() {
         statusView = android.widget.TextView(this).apply {
             text = ""
             setPadding(24, 12, 24, 12)
+        }
+        gestures = PlaybackGestureHandler(
+            duration = { controller?.duration ?: 0L },
+            position = { controller?.currentPosition ?: 0L },
+            brightness = { window.attributes.screenBrightness.takeIf { it in 0f..1f } ?: 0.5f },
+            volume = {
+                val max = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
+                if (max == 0) 0f else audioManager.getStreamVolume(AudioManager.STREAM_MUSIC).toFloat() / max
+            },
+            seek = { controller?.seekTo(it) },
+            setBrightness = { value -> window.attributes = window.attributes.apply { screenBrightness = PlaybackMath.clamp(value) } },
+            setVolume = { value ->
+                val max = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
+                if (max > 0) audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, (PlaybackMath.clamp(value) * max).toInt(), 0)
+            },
+            showOverlay = { statusView.text = it },
+            clearOverlay = { if (controller?.playbackState == Player.STATE_READY) statusView.text = "" }
+        )
+        playerView.setOnTouchListener { _, event ->
+            when (event.actionMasked) {
+                MotionEvent.ACTION_DOWN -> gestures.down(event.x, event.y, playerView.width.toFloat(), playerView.height.toFloat())
+                MotionEvent.ACTION_MOVE -> gestures.move(event.x, event.y)
+                MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> gestures.up()
+            }
+            true
         }
         setContentView(android.widget.LinearLayout(this).apply {
             orientation = android.widget.LinearLayout.VERTICAL

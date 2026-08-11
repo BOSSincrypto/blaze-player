@@ -20,12 +20,45 @@ class PlaybackMathTest {
         val calls = mutableListOf<Long>()
         SeekCoalescer(calls::add).also { it.offer(10); it.offer(20); it.release() }
         assertEquals(listOf(20L), calls)
+        assertEquals(1000L, PlaybackMath.seekByDelta(900, 500f, 100f, 1000))
+        assertEquals(0L, PlaybackMath.seekByDelta(100, -500f, 100f, 1000))
     }
 
     @Test fun `vertical gesture levels are finite and bounded`() {
         assertEquals(1f, PlaybackMath.verticalLevel(-1000f, 100f))
         assertEquals(0f, PlaybackMath.verticalLevel(1000f, 100f))
         assertTrue(PlaybackMath.verticalLevel(Float.NaN, 0f).isFinite())
+    }
+
+    @Test fun `gesture handler isolates vertical controls and coalesces horizontal seek`() {
+        var brightness = 0.5f
+        var volume = 0.5f
+        val seeks = mutableListOf<Long>()
+        val overlays = mutableListOf<String>()
+        val handler = PlaybackGestureHandler(
+            duration = { 1000L }, position = { 500L },
+            brightness = { brightness }, volume = { volume }, seek = seeks::add,
+            setBrightness = { brightness = it }, setVolume = { volume = it },
+            showOverlay = overlays::add, clearOverlay = { overlays.add("clear") }
+        )
+        handler.down(10f, 100f, 200f, 200f)
+        handler.move(10f, -1000f)
+        handler.up()
+        assertEquals(1f, brightness)
+        assertEquals(0.5f, volume)
+        assertEquals("clear", overlays.last())
+
+        handler.down(190f, 100f, 200f, 200f)
+        handler.move(190f, -1000f)
+        handler.up()
+        assertEquals(1f, volume)
+        assertEquals(1f, brightness)
+
+        handler.down(100f, 100f, 200f, 200f)
+        handler.move(0f, 105f)
+        handler.move(200f, 105f)
+        handler.up()
+        assertEquals(listOf(1000L), seeks)
     }
 
     @Test fun `speed exposes exact presets and rejects invalid values`() {
