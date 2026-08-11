@@ -16,10 +16,12 @@ import com.google.common.util.concurrent.ListenableFuture
 class PlaybackService : MediaSessionService() {
     companion object {
         val prepareAndAutoplay = SessionCommand("com.blaze.player.PREPARE_AUTOPLAY", Bundle.EMPTY)
+        val retryPreparation = SessionCommand("com.blaze.player.RETRY_PREPARATION", Bundle.EMPTY)
         private val singletonLock = Any()
         @Volatile private var sharedPlayer: ExoPlayer? = null
         @Volatile private var sharedSession: MediaSession? = null
         fun playerInstance(): ExoPlayer? = sharedPlayer
+        @Volatile var state: PlaybackState = PlaybackState()
 
     }
     private lateinit var session: MediaSession
@@ -29,11 +31,23 @@ class PlaybackService : MediaSessionService() {
     internal val playerListener = object : Player.Listener {
         override fun onPlaybackStateChanged(state: Int) {
             val player = sharedPlayer ?: return
+            if (state == Player.STATE_BUFFERING) updateState(PlaybackState(PlaybackStatus.LOADING, mediaId = player.currentMediaItem?.mediaId))
+            if (state == Player.STATE_READY) updateState(PlaybackState(PlaybackStatus.READY, mediaId = player.currentMediaItem?.mediaId))
             if (state == Player.STATE_READY && autoplayPending && preparedMediaId == player.currentMediaItem?.mediaId) {
                 autoplayPending = false
                 player.play()
             }
         }
+
+        override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
+            // A failed prepare must never leave a later reconnect or retry with stale autoplay.
+            autoplayPending = false
+            updateState(PlaybackState(PlaybackStatus.ERROR, PlaybackErrorMapper.map(error), preparedMediaId))
+        }
+    }
+
+    private fun updateState(value: PlaybackState) {
+        state = value
     }
 
     override fun onCreate() {
@@ -51,16 +65,18 @@ class PlaybackService : MediaSessionService() {
                     .add(SessionCommand.COMMAND_PLAY_PAUSE)
                     .add(SessionCommand.COMMAND_SEEK_IN_CURRENT_MEDIA_ITEM)
                     .add(prepareAndAutoplay)
+                    .add(retryPreparation)
                     .build())
             override fun onCustomCommand(session: MediaSession, controller: MediaSession.ControllerInfo, customCommand: SessionCommand, args: Bundle): ListenableFuture<SessionResult> {
-                if (customCommand == prepareAndAutoplay) {
+                if (customCommand == prepareAndAutoplay || customCommand == retryPreparation) {
                     val item = args.getParcelable<MediaItem>("media_item")
                     // Reconnects or duplicate intent delivery must not reprepare the
                     // authoritative item. A genuinely new selection still replaces it.
-                    if (item != null && !(item.mediaId == preparedMediaId &&
+                    if (item != null && (customCommand == retryPreparation || !(item.mediaId == preparedMediaId &&
                                 session.player.currentMediaItem?.mediaId == item.mediaId)) {
                         autoplayPending = true
                         preparedMediaId = item.mediaId
+                        updateState(PlaybackState(PlaybackStatus.LOADING, mediaId = item.mediaId))
                         session.player.setMediaItem(item)
                         session.player.prepare()
                     }
