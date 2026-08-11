@@ -187,14 +187,16 @@ class PlaybackService : MediaSessionService() {
             override fun onConnect(session: MediaSession, controller: MediaSession.ControllerInfo): MediaSession.ConnectionResult =
                 MediaSession.ConnectionResult.accept(SessionCommands.Builder()
                     .add(SessionCommand.COMMAND_PLAY_PAUSE)
-                    .add(SessionCommand.COMMAND_SEEK_IN_CURRENT_MEDIA_ITEM)
                     .add(prepareAndAutoplay)
                     .add(retryPreparation)
                     .add(setPlaybackSpeed)
                     .add(stopPlayback)
                     .build())
             override fun onCustomCommand(session: MediaSession, controller: MediaSession.ControllerInfo, customCommand: SessionCommand, args: Bundle): ListenableFuture<SessionResult> {
-                performance.boundary(PerformanceStage.DISPATCH, args.getParcelable<MediaItem>("media_item")?.localConfiguration?.uri?.toString())
+                val item = args.getBundle("media_item")?.let { bundle ->
+                    runCatching { MediaItem.CREATOR.fromBundle(bundle) }.getOrNull()
+                }
+                performance.boundary(PerformanceStage.DISPATCH, item?.localConfiguration?.uri?.toString())
                 if (customCommand == setPlaybackSpeed) {
                     setGlobalPlaybackSpeed(args.getFloat("speed", PlaybackSpeedStore.DEFAULT))
                     performance.boundary(PerformanceStage.POSITION_ACKNOWLEDGEMENT)
@@ -208,7 +210,6 @@ class PlaybackService : MediaSessionService() {
                     return Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS))
                 }
                 if (customCommand == prepareAndAutoplay || customCommand == retryPreparation) {
-                    val item = args.getParcelable<MediaItem>("media_item")
                     val requestedContext = args.getString("autoplay_context")
                     val context = requestedContext
                         ?.let { runCatching { AutoplayContext.valueOf(it) }.getOrNull() }
@@ -259,7 +260,7 @@ class PlaybackService : MediaSessionService() {
                         }
                     }
                 }
-                performance.boundary(PerformanceStage.POSITION_ACKNOWLEDGEMENT, args.getParcelable<MediaItem>("media_item")?.localConfiguration?.uri?.toString())
+                performance.boundary(PerformanceStage.POSITION_ACKNOWLEDGEMENT, item?.localConfiguration?.uri?.toString())
                 checkpoint(false)
                 return Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS))
             }

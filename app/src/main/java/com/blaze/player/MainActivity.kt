@@ -131,7 +131,7 @@ class MainActivity : ComponentActivity() {
             lastMediaItem = result.mediaItem
             showLoading()
             c.sendCustomCommand(PlaybackService.prepareAndAutoplay, Bundle().apply {
-                putParcelable("media_item", result.mediaItem)
+                putBundle("media_item", result.mediaItem.toBundle())
                 putString("autoplay_context", "PICKER")
             })
         } else {
@@ -156,7 +156,7 @@ class MainActivity : ComponentActivity() {
             lastMediaItem = result.mediaItem
             showLoading()
             c.sendCustomCommand(PlaybackService.prepareAndAutoplay, android.os.Bundle().apply {
-                putParcelable("media_item", result.mediaItem)
+                putBundle("media_item", result.mediaItem.toBundle())
                 putString("autoplay_context", "SHARE")
             })
         } else if (result is com.blaze.player.source.SourceResult.Rejected && input.data?.scheme == "content") {
@@ -188,7 +188,7 @@ class MainActivity : ComponentActivity() {
                 val item = lastMediaItem ?: return@setOnClickListener
                 showLoading()
                 controller?.sendCustomCommand(PlaybackService.retryPreparation, Bundle().apply {
-                    putParcelable("media_item", item)
+                    putBundle("media_item", item.toBundle())
                 })
             }
         } else {
