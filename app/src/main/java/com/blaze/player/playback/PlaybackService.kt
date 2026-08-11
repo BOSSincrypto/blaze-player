@@ -16,37 +16,49 @@ import com.google.common.util.concurrent.ListenableFuture
 class PlaybackService : MediaSessionService() {
     companion object {
         val prepareAndAutoplay = SessionCommand("com.blaze.player.PREPARE_AUTOPLAY", Bundle.EMPTY)
+        private val singletonLock = Any()
         @Volatile private var sharedPlayer: ExoPlayer? = null
         @Volatile private var sharedSession: MediaSession? = null
         fun playerInstance(): ExoPlayer? = sharedPlayer
+
     }
     private lateinit var session: MediaSession
     private var autoplayPending = false
     private var preparedMediaId: String? = null
 
+    internal val playerListener = object : Player.Listener {
+        override fun onPlaybackStateChanged(state: Int) {
+            val player = sharedPlayer ?: return
+            if (state == Player.STATE_READY && autoplayPending && preparedMediaId == player.currentMediaItem?.mediaId) {
+                autoplayPending = false
+                player.play()
+            }
+        }
+    }
+
     override fun onCreate() {
         super.onCreate()
-        val player = sharedPlayer ?: ExoPlayer.Builder(this).build().also {
-            sharedPlayer = it
-            it.addListener(object : Player.Listener {
-                override fun onPlaybackStateChanged(state: Int) {
-                    if (state == Player.STATE_READY && autoplayPending && preparedMediaId == it.currentMediaItem?.mediaId) {
-                        autoplayPending = false
-                        it.play()
-                    }
-                }
-            })
+        val player = synchronized(singletonLock) {
+            sharedPlayer ?: ExoPlayer.Builder(applicationContext).build().also { created ->
+                sharedPlayer = created
+                created.addListener(playerListener)
+            }
         }
-        session = sharedSession ?: MediaSession.Builder(this, player).setCallback(object : MediaSession.Callback {
+        session = synchronized(singletonLock) {
+            sharedSession ?: MediaSession.Builder(this, player).setCallback(object : MediaSession.Callback {
             override fun onConnect(session: MediaSession, controller: MediaSession.ControllerInfo): MediaSession.ConnectionResult =
                 MediaSession.ConnectionResult.accept(SessionCommands.Builder()
                     .add(SessionCommand.COMMAND_PLAY_PAUSE)
+                    .add(SessionCommand.COMMAND_SEEK_IN_CURRENT_MEDIA_ITEM)
                     .add(prepareAndAutoplay)
                     .build())
             override fun onCustomCommand(session: MediaSession, controller: MediaSession.ControllerInfo, customCommand: SessionCommand, args: Bundle): ListenableFuture<SessionResult> {
                 if (customCommand == prepareAndAutoplay) {
                     val item = args.getParcelable<MediaItem>("media_item")
-                    if (item != null && item.mediaId != preparedMediaId) {
+                    // Reconnects or duplicate intent delivery must not reprepare the
+                    // authoritative item. A genuinely new selection still replaces it.
+                    if (item != null && !(item.mediaId == preparedMediaId &&
+                                session.player.currentMediaItem?.mediaId == item.mediaId)) {
                         autoplayPending = true
                         preparedMediaId = item.mediaId
                         session.player.setMediaItem(item)
@@ -55,7 +67,8 @@ class PlaybackService : MediaSessionService() {
                 }
                 return Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS))
             }
-        }).build().also { sharedSession = it }
+            }).build().also { sharedSession = it }
+        }
     }
 
     override fun onGetSession(controllerInfo: MediaSession.ControllerInfo): MediaSession = session
