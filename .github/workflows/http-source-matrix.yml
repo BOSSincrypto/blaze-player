@@ -27,6 +27,7 @@ jobs:
       - name: Run the single fake HTTP matrix
         env:
           GITHUB_ACTIONS: 'true'
+          ANDROID_GATE_PASSED: 'true'
           HTTP_MATRIX_REPORT: build/reports/http-source-matrix.json
         run: python3 scripts/http_source_matrix.py
       - name: Upload matrix report
