@@ -1,6 +1,7 @@
 package com.blaze.player
 
 import android.os.Bundle
+import android.os.Build
 import android.view.ViewGroup
 import android.view.MotionEvent
 import android.media.AudioManager
@@ -21,8 +22,15 @@ import android.content.Intent
 import android.net.Uri
 import android.app.PictureInPictureParams
 import com.google.common.util.concurrent.ListenableFuture
+import com.blaze.player.playback.NotificationPermissionPolicy
+import com.blaze.player.playback.NotificationPermissionState
+import com.blaze.player.playback.NotificationPermissionStore
 
 class MainActivity : ComponentActivity() {
+    private lateinit var notificationPermissionStore: NotificationPermissionStore
+    private val notificationPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        notificationPermissionStore.recordRequestResult(granted)
+    }
     private lateinit var playerView: PlayerView
     private lateinit var controllerFuture: ListenableFuture<MediaController>
     private var controller: MediaController? = null
@@ -41,6 +49,7 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        notificationPermissionStore = NotificationPermissionStore(this)
         playerView = PlayerView(this).apply { layoutParams = ViewGroup.LayoutParams(-1, 0) }
         val controls = PlaybackControls(this)
         controls.onSpeedChanged { speed ->
@@ -101,6 +110,10 @@ class MainActivity : ComponentActivity() {
                 }
             })
             handleIntent(intent, c)
+            val state = notificationPermissionStore.state()
+            if (NotificationPermissionPolicy.shouldRequest(android.os.Build.VERSION.SDK_INT, state, intent?.action != Intent.ACTION_MAIN)) {
+                notificationPermission.launch(android.Manifest.permission.POST_NOTIFICATIONS)
+            }
             if (intent?.action == Intent.ACTION_MAIN) picker.launch(arrayOf("video/*"))
         } }, androidx.core.content.ContextCompat.getMainExecutor(this))
     }
@@ -114,6 +127,7 @@ class MainActivity : ComponentActivity() {
         )
         val c = controller ?: return
         if (result is com.blaze.player.source.SourceResult.Accepted) {
+            requestNotificationPermissionForPlayback()
             lastMediaItem = result.mediaItem
             showLoading()
             c.sendCustomCommand(PlaybackService.prepareAndAutoplay, Bundle().apply {
@@ -122,6 +136,13 @@ class MainActivity : ComponentActivity() {
             })
         } else {
             showError(com.blaze.player.playback.PlaybackError("Video unavailable", "The selected video cannot be opened. Choose another file.", false))
+        }
+    }
+
+    private fun requestNotificationPermissionForPlayback() {
+        val state = notificationPermissionStore.state()
+        if (NotificationPermissionPolicy.shouldRequest(Build.VERSION.SDK_INT, state, true)) {
+            notificationPermission.launch(android.Manifest.permission.POST_NOTIFICATIONS)
         }
     }
 

@@ -36,6 +36,7 @@ class PlaybackService : MediaSessionService() {
         val prepareAndAutoplay = SessionCommand("com.blaze.player.PREPARE_AUTOPLAY", Bundle.EMPTY)
         val retryPreparation = SessionCommand("com.blaze.player.RETRY_PREPARATION", Bundle.EMPTY)
         val setPlaybackSpeed = SessionCommand("com.blaze.player.SET_PLAYBACK_SPEED", Bundle.EMPTY)
+        val stopPlayback = SessionCommand("com.blaze.player.STOP_PLAYBACK", Bundle.EMPTY)
         private val singletonLock = Any()
         @Volatile private var sharedPlayer: ExoPlayer? = null
         @Volatile private var sharedSession: MediaSession? = null
@@ -190,12 +191,20 @@ class PlaybackService : MediaSessionService() {
                     .add(prepareAndAutoplay)
                     .add(retryPreparation)
                     .add(setPlaybackSpeed)
+                    .add(stopPlayback)
                     .build())
             override fun onCustomCommand(session: MediaSession, controller: MediaSession.ControllerInfo, customCommand: SessionCommand, args: Bundle): ListenableFuture<SessionResult> {
                 performance.boundary(PerformanceStage.DISPATCH, args.getParcelable<MediaItem>("media_item")?.localConfiguration?.uri?.toString())
                 if (customCommand == setPlaybackSpeed) {
                     setGlobalPlaybackSpeed(args.getFloat("speed", PlaybackSpeedStore.DEFAULT))
                     performance.boundary(PerformanceStage.POSITION_ACKNOWLEDGEMENT)
+                    return Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS))
+                }
+                if (customCommand == stopPlayback) {
+                    // Stop is explicit: checkpoint first, then stop the service-owned player.
+                    checkpoint(false)
+                    session.player.stop()
+                    updateState(PlaybackState())
                     return Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS))
                 }
                 if (customCommand == prepareAndAutoplay || customCommand == retryPreparation) {
