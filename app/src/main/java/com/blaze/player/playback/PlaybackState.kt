@@ -23,8 +23,7 @@ object PlaybackErrorMapper {
             error.errorCode == PlaybackException.ERROR_CODE_IO_BAD_HTTP_STATUS ||
                 cause.contains("http") || cause.contains("403") || cause.contains("404") ->
                 PlaybackError("Video unavailable", "The server rejected or could not find this video.")
-            error.errorCode == PlaybackException.ERROR_CODE_IO_UNSPECIFIED ||
-                cause.contains("tls") || cause.contains("ssl") ->
+            cause.contains("tls") || cause.contains("ssl") || cause.contains("certificate") ->
                 PlaybackError("Secure connection failed", "The video host could not be reached securely.")
             error.errorCode == PlaybackException.ERROR_CODE_PARSING_CONTAINER_MALFORMED ||
                 error.errorCode == PlaybackException.ERROR_CODE_DECODER_INIT_FAILED ||

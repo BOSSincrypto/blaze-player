@@ -31,12 +31,6 @@ class MainActivity : ComponentActivity() {
         statusView = android.widget.TextView(this).apply {
             text = ""
             setPadding(24, 12, 24, 12)
-            setOnClickListener {
-                val item = lastMediaItem ?: return@setOnClickListener
-                controller?.sendCustomCommand(PlaybackService.retryPreparation, Bundle().apply {
-                    putParcelable("media_item", item)
-                })
-            }
         }
         setContentView(android.widget.LinearLayout(this).apply {
             orientation = android.widget.LinearLayout.VERTICAL
@@ -50,16 +44,15 @@ class MainActivity : ComponentActivity() {
             controls.bind(c)
             c.addListener(object : Player.Listener {
                 override fun onPlaybackStateChanged(state: Int) {
-                    statusView.text = when (state) {
-                        Player.STATE_BUFFERING -> "Loading…"
-                        Player.STATE_READY -> ""
-                        else -> statusView.text
+                    when (state) {
+                        Player.STATE_BUFFERING -> showLoading()
+                        Player.STATE_READY -> showReady()
                     }
                 }
 
                 override fun onPlayerError(error: PlaybackException) {
                     val mapped = com.blaze.player.playback.PlaybackErrorMapper.map(error)
-                    statusView.text = "${mapped.title}: ${mapped.message}"
+                    showError(mapped)
                 }
             })
             handleIntent(intent, c)
@@ -77,10 +70,42 @@ class MainActivity : ComponentActivity() {
         })
         if (result is com.blaze.player.source.SourceResult.Accepted) {
             lastMediaItem = result.mediaItem
-            statusView.text = "Loading…"
+            showLoading()
             c.sendCustomCommand(PlaybackService.prepareAndAutoplay, android.os.Bundle().apply {
                 putParcelable("media_item", result.mediaItem)
             })
+        }
+    }
+
+    private fun showLoading() {
+        statusView.text = "Loading…"
+        statusView.isClickable = false
+        statusView.setOnClickListener(null)
+    }
+
+    private fun showReady() {
+        statusView.text = ""
+        statusView.isClickable = false
+        statusView.setOnClickListener(null)
+    }
+
+    private fun showError(error: com.blaze.player.playback.PlaybackError) {
+        statusView.text = if (error.canRetry) {
+            "${error.title}: ${error.message} Tap to retry."
+        } else {
+            "${error.title}: ${error.message}"
+        }
+        statusView.isClickable = error.canRetry
+        if (error.canRetry) {
+            statusView.setOnClickListener {
+                val item = lastMediaItem ?: return@setOnClickListener
+                showLoading()
+                controller?.sendCustomCommand(PlaybackService.retryPreparation, Bundle().apply {
+                    putParcelable("media_item", item)
+                })
+            }
+        } else {
+            statusView.setOnClickListener(null)
         }
     }
 
