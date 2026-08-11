@@ -34,6 +34,11 @@ class MainActivity : ComponentActivity() {
         super.onCreate(savedInstanceState)
         playerView = PlayerView(this).apply { layoutParams = ViewGroup.LayoutParams(-1, 0) }
         val controls = PlaybackControls(this)
+        controls.onSpeedChanged { speed ->
+            // The service is the only owner of persistence and player state. A custom
+            // session command keeps this UI independent from service implementation details.
+            controller?.sendCustomCommand(PlaybackService.setPlaybackSpeed, Bundle().apply { putFloat("speed", speed) })
+        }
         statusView = android.widget.TextView(this).apply {
             text = ""
             setPadding(24, 12, 24, 12)

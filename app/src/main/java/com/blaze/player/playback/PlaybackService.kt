@@ -12,11 +12,18 @@ import androidx.media3.session.SessionCommands
 import androidx.media3.session.SessionResult
 import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
+import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class PlaybackService : MediaSessionService() {
     companion object {
         val prepareAndAutoplay = SessionCommand("com.blaze.player.PREPARE_AUTOPLAY", Bundle.EMPTY)
         val retryPreparation = SessionCommand("com.blaze.player.RETRY_PREPARATION", Bundle.EMPTY)
+        val setPlaybackSpeed = SessionCommand("com.blaze.player.SET_PLAYBACK_SPEED", Bundle.EMPTY)
         private val singletonLock = Any()
         @Volatile private var sharedPlayer: ExoPlayer? = null
         @Volatile private var sharedSession: MediaSession? = null
@@ -27,6 +34,7 @@ class PlaybackService : MediaSessionService() {
     private lateinit var session: MediaSession
     private var autoplayPending = false
     private var preparedMediaId: String? = null
+    private val settingsScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     internal val playerListener = object : Player.Listener {
         override fun onPlaybackStateChanged(state: Int) {
@@ -58,6 +66,11 @@ class PlaybackService : MediaSessionService() {
                 created.addListener(playerListener)
             }
         }
+        settingsScope.launch {
+            PlaybackSpeedStore.observe(applicationContext).distinctUntilChanged().collect { speed ->
+                withContext(Dispatchers.Main) { sharedPlayer?.setPlaybackSpeed(speed) }
+            }
+        }
         session = synchronized(singletonLock) {
             sharedSession ?: MediaSession.Builder(this, player).setCallback(object : MediaSession.Callback {
             override fun onConnect(session: MediaSession, controller: MediaSession.ControllerInfo): MediaSession.ConnectionResult =
@@ -66,8 +79,13 @@ class PlaybackService : MediaSessionService() {
                     .add(SessionCommand.COMMAND_SEEK_IN_CURRENT_MEDIA_ITEM)
                     .add(prepareAndAutoplay)
                     .add(retryPreparation)
+                    .add(setPlaybackSpeed)
                     .build())
             override fun onCustomCommand(session: MediaSession, controller: MediaSession.ControllerInfo, customCommand: SessionCommand, args: Bundle): ListenableFuture<SessionResult> {
+                if (customCommand == setPlaybackSpeed) {
+                    setGlobalPlaybackSpeed(args.getFloat("speed", PlaybackSpeedStore.DEFAULT))
+                    return Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS))
+                }
                 if (customCommand == prepareAndAutoplay || customCommand == retryPreparation) {
                     val item = args.getParcelable<MediaItem>("media_item")
                     // Reconnects or duplicate intent delivery must not reprepare the
@@ -92,5 +110,11 @@ class PlaybackService : MediaSessionService() {
     override fun onDestroy() {
         // Keep the singleton alive across Activity/service reconnects. Process teardown releases it.
         super.onDestroy()
+    }
+
+    /** Updates the global setting; the DataStore observer applies it to current and future items. */
+    fun setGlobalPlaybackSpeed(value: Float) {
+        val speed = PlaybackSpeedStore.normalize(value) ?: return
+        settingsScope.launch { PlaybackSpeedStore.save(applicationContext, speed) }
     }
 }
