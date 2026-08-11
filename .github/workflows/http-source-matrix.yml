@@ -44,50 +44,46 @@ jobs:
           mkdir -p build/reports/deferred-test-evidence/source-policy \
             build/reports/deferred-test-evidence/autoplay
 
-          # Do not mistake reports left by a previous Gradle invocation for
-          # evidence from this run. The two fixtures are deliberately run in
-          # separate invocations so each report is copied immediately after
-          # the invocation that produced it.
-          run_and_snapshot() {
-            local classname="$1"
-            local destination="$2"
-            local report_name="TEST-${classname}.xml"
-            local status=0
-            find "$destination" -type f -delete
-            if [[ -d app/build/test-results/testDebugUnitTest ]]; then
-              find app/build/test-results/testDebugUnitTest -type f -delete
-              find app/build/test-results/testDebugUnitTest -depth -type d -empty -delete
-            fi
-            ./gradlew --no-daemon --rerun-tasks testDebugUnitTest --tests "$classname" || status=$?
-
-            local reports=()
-            while IFS= read -r -d '' report; do
-              reports+=("$report")
-            done < <(find app/build/test-results -type f -name "$report_name" -print0 2>/dev/null)
-            if (( ${#reports[@]} != 1 )); then
-              printf 'Expected exactly one %s XML report, found %s\n' \
-                "$classname" "${#reports[@]}" >&2
-              printf '%s\n' "${reports[@]}" >&2
-              return 1
-            fi
-            # A read-only destination is an immutable snapshot for all later
-            # steps; recorder.py must consume this copy, not a live Gradle file.
-            install -m 0444 -- "${reports[0]}" "$destination/$report_name"
-            return "$status"
-          }
-
-          test_status=0
-          if ! run_and_snapshot \
-            'com.blaze.player.source.SourcePolicyTest' \
-            build/reports/deferred-test-evidence/source-policy; then
-            test_status=1
+          # Clear stale live reports once, then snapshot the two exact outputs
+          # from the single combined test invocation.
+          if [[ -d app/build/test-results/testDebugUnitTest ]]; then
+            find app/build/test-results/testDebugUnitTest -type f -delete
+            find app/build/test-results/testDebugUnitTest -depth -type d -empty -delete
           fi
-          if ! run_and_snapshot \
-            'com.blaze.player.playback.AutoplayTransitionControllerTest' \
-            build/reports/deferred-test-evidence/autoplay; then
-            test_status=1
+          source_policy_source='app/build/test-results/testDebugUnitTest/TEST-com.blaze.player.source.SourcePolicyTest.xml'
+          autoplay_source='app/build/test-results/testDebugUnitTest/TEST-com.blaze.player.playback.AutoplayTransitionControllerTest.xml'
+          source_policy_destination='build/reports/deferred-test-evidence/source-policy/TEST-com.blaze.player.source.SourcePolicyTest.xml'
+          autoplay_destination='build/reports/deferred-test-evidence/autoplay/TEST-com.blaze.player.playback.AutoplayTransitionControllerTest.xml'
+          find build/reports/deferred-test-evidence/source-policy \
+            build/reports/deferred-test-evidence/autoplay -type f -delete
+
+          set +e
+          ./gradlew --no-daemon --rerun-tasks testDebugUnitTest \
+            --tests 'com.blaze.player.source.SourcePolicyTest' \
+            --tests 'com.blaze.player.playback.AutoplayTransitionControllerTest'
+          test_status=$?
+          set -e
+
+          snapshot_status=0
+          source_policy_count=$(find app/build/test-results/testDebugUnitTest -type f \
+            -name 'TEST-com.blaze.player.source.SourcePolicyTest.xml' | wc -l)
+          autoplay_count=$(find app/build/test-results/testDebugUnitTest -type f \
+            -name 'TEST-com.blaze.player.playback.AutoplayTransitionControllerTest.xml' | wc -l)
+          if (( source_policy_count != 1 )); then
+            printf 'Expected exactly one source: %s\n' "$source_policy_source" >&2
+            snapshot_status=1
           fi
-          exit "$test_status"
+          if (( autoplay_count != 1 )); then
+            printf 'Expected exactly one source: %s\n' "$autoplay_source" >&2
+            snapshot_status=1
+          fi
+          if (( snapshot_status == 0 )); then
+            install -m 0444 -- "$source_policy_source" "$source_policy_destination"
+            install -m 0444 -- "$autoplay_source" "$autoplay_destination"
+          fi
+          if (( test_status != 0 || snapshot_status != 0 )); then
+            exit 1
+          fi
 
       - name: Verify deferred test XML snapshots
         if: always()
