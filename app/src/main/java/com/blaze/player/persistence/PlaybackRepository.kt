@@ -25,7 +25,7 @@ class PlaybackRepository(private val database: PlaybackDatabase) {
                 durationMs = durationMs ?: existing?.durationMs,
                 local = source.local,
                 persistable = source.persistable || existing?.persistable == true,
-                metadata = metadata.ifBlank { existing?.metadata.orEmpty() }
+                metadata = PrivacyRedactor.metadata(metadata.ifBlank { existing?.metadata.orEmpty() })
             )
         )
     }
