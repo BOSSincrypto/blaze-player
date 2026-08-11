@@ -5,6 +5,7 @@ import android.view.ViewGroup
 import android.view.MotionEvent
 import android.media.AudioManager
 import androidx.activity.ComponentActivity
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.media3.common.Player
 import androidx.media3.common.PlaybackException
 import androidx.media3.session.MediaController
@@ -29,6 +30,13 @@ class MainActivity : ComponentActivity() {
     private lateinit var statusView: android.widget.TextView
     private lateinit var gestures: PlaybackGestureHandler
     private val audioManager by lazy { getSystemService(AudioManager::class.java) }
+    private val picker = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri == null) {
+            showError(com.blaze.player.playback.PlaybackError("Picker", "No video was selected.", false))
+            return@registerForActivityResult
+        }
+        preparePickerUri(uri)
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -92,7 +100,36 @@ class MainActivity : ComponentActivity() {
                 }
             })
             handleIntent(intent, c)
+            if (intent?.action == Intent.ACTION_MAIN) picker.launch(arrayOf("video/*"))
         } }, androidx.core.content.ContextCompat.getMainExecutor(this))
+    }
+
+    private fun preparePickerUri(uri: Uri) {
+        val access = object : LocalSourceAccess {
+            override fun canRead(uri: Uri): Boolean = runCatching {
+                contentResolver.openAssetFileDescriptor(uri, "r")?.use { true } == true
+            }.getOrDefault(false)
+
+            override fun takePersistableReadPermission(uri: Uri): Boolean = runCatching {
+                contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                true
+            }.getOrDefault(false)
+        }
+        val result = SourceNormalizer.fromPicker(
+            uri,
+            access,
+            Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION
+        )
+        val c = controller ?: return
+        if (result is com.blaze.player.source.SourceResult.Accepted) {
+            lastMediaItem = result.mediaItem
+            showLoading()
+            c.sendCustomCommand(PlaybackService.prepareAndAutoplay, Bundle().apply {
+                putParcelable("media_item", result.mediaItem)
+            })
+        } else {
+            showError(com.blaze.player.playback.PlaybackError("Video unavailable", "The selected video cannot be opened. Choose another file.", false))
+        }
     }
 
     private fun handleIntent(input: Intent?, c: MediaController) {
@@ -101,8 +138,13 @@ class MainActivity : ComponentActivity() {
         if (intentKey == lastIntentKey) return
         lastIntentKey = intentKey
         val result = SourceNormalizer.fromIntent(input, object : LocalSourceAccess {
-            override fun canRead(uri: Uri) = true
-            override fun takePersistableReadPermission(uri: Uri) = false
+            override fun canRead(uri: Uri) = runCatching {
+                contentResolver.openAssetFileDescriptor(uri, "r")?.use { true } == true
+            }.getOrDefault(false)
+            override fun takePersistableReadPermission(uri: Uri) = runCatching {
+                contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                true
+            }.getOrDefault(false)
         })
         if (result is com.blaze.player.source.SourceResult.Accepted) {
             lastMediaItem = result.mediaItem
@@ -110,6 +152,8 @@ class MainActivity : ComponentActivity() {
             c.sendCustomCommand(PlaybackService.prepareAndAutoplay, android.os.Bundle().apply {
                 putParcelable("media_item", result.mediaItem)
             })
+        } else if (result is com.blaze.player.source.SourceResult.Rejected && input.data?.scheme == "content") {
+            showError(com.blaze.player.playback.PlaybackError("Video unavailable", "This shared video is no longer readable. Ask the sender to share it again.", false))
         }
     }
 

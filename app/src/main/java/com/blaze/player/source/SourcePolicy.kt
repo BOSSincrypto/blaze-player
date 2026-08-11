@@ -1,6 +1,8 @@
 package com.blaze.player.source
 
 import android.content.Intent
+import android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION
+import android.content.Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION
 import android.net.Uri
 import androidx.media3.common.MediaItem
 import java.net.URI
@@ -22,6 +24,13 @@ data class NormalizedSource(val uri: Uri, val local: Boolean, val persistable: B
 interface LocalSourceAccess {
     fun canRead(uri: Uri): Boolean
     fun takePersistableReadPermission(uri: Uri): Boolean
+
+    /** Attempts persistence only when the originating intent advertised that grant. */
+    fun takePersistableReadPermission(uri: Uri, grantFlags: Int): Boolean {
+        if (grantFlags and FLAG_GRANT_READ_URI_PERMISSION == 0 ||
+            grantFlags and FLAG_GRANT_PERSISTABLE_URI_PERMISSION == 0) return false
+        return takePersistableReadPermission(uri)
+    }
 }
 
 object SourceNormalizer {
@@ -31,7 +40,8 @@ object SourceNormalizer {
         "encrypted", "encryption", "cenc", "cbcs", "pssh"
     )
 
-    fun fromPicker(uri: Uri?, access: LocalSourceAccess): SourceResult = normalizeLocal(uri, access)
+    fun fromPicker(uri: Uri?, access: LocalSourceAccess, grantFlags: Int = FLAG_GRANT_READ_URI_PERMISSION or FLAG_GRANT_PERSISTABLE_URI_PERMISSION): SourceResult =
+        normalizeLocal(uri, access, grantFlags)
 
     fun fromIntent(intent: Intent, access: LocalSourceAccess): SourceResult {
         // Deterministic precedence: a typed stream URI, then data URI, then SEND text.
@@ -43,25 +53,29 @@ object SourceNormalizer {
             ?.let { runCatching { Uri.parse(it) }.getOrNull() }
             ?.let(candidates::add)
         if (candidates.isEmpty()) return SourceResult.Rejected(Reason.EMPTY)
-        return candidates.asSequence().map { normalize(it, access) }.firstOrNull { it is SourceResult.Accepted }
-            ?: (normalize(candidates.first(), access) as SourceResult.Rejected)
+        return candidates.asSequence().map { normalize(it, access, intent.flags, emptyMap()) }.firstOrNull { it is SourceResult.Accepted }
+            ?: (normalize(candidates.first(), access, intent.flags, emptyMap()) as SourceResult.Rejected)
     }
 
     fun normalize(uri: Uri?, access: LocalSourceAccess): SourceResult {
-        return normalize(uri, access, emptyMap())
+        return normalize(uri, access, 0, emptyMap())
     }
 
     /** Normalizes an external URI and optional source metadata through the same policy. */
     fun normalize(uri: Uri?, access: LocalSourceAccess, metadata: Map<String, String>): SourceResult {
+        return normalize(uri, access, 0, metadata)
+    }
+
+    fun normalize(uri: Uri?, access: LocalSourceAccess, grantFlags: Int, metadata: Map<String, String> = emptyMap()): SourceResult {
         if (uri == null || uri.toString().isBlank()) return SourceResult.Rejected(Reason.EMPTY)
         return when (uri.scheme?.lowercase()) {
-            "content" -> normalizeLocal(uri, access)
+            "content" -> normalizeLocal(uri, access, grantFlags)
             "http", "https" -> normalizeRemote(uri, metadata)
             else -> SourceResult.Rejected(Reason.UNSUPPORTED_SCHEME)
         }
     }
 
-    private fun normalizeLocal(uri: Uri?, access: LocalSourceAccess): SourceResult {
+    private fun normalizeLocal(uri: Uri?, access: LocalSourceAccess, grantFlags: Int = 0): SourceResult {
         if (uri?.scheme?.lowercase() != "content" || uri.authority.isNullOrBlank()) {
             return SourceResult.Rejected(Reason.EMPTY)
         }
@@ -69,7 +83,7 @@ object SourceNormalizer {
         if (!readable) return SourceResult.Rejected(Reason.NOT_READABLE)
         // Providers are allowed to return a non-persistable grant. Playback remains
         // valid for this handoff, but we must not claim durable reopen in that case.
-        val persistable = runCatching { access.takePersistableReadPermission(uri) }.getOrDefault(false)
+        val persistable = runCatching { access.takePersistableReadPermission(uri, grantFlags) }.getOrDefault(false)
         return SourceResult.Accepted(MediaItem.fromUri(uri), NormalizedSource(uri, local = true, persistable = persistable))
     }
 
