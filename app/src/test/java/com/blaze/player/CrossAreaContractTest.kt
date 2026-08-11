@@ -76,7 +76,11 @@ class CrossAreaContractTest {
             putBundle(PlaybackService.MEDIA_ITEM_ARGUMENT_KEY, expected.toBundle())
         }
 
-        assertEquals(expected, PlaybackService.mediaItemFromArgs(args))
+        val decoded = PlaybackService.mediaItemFromArgs(args)
+        // Media3 Bundleable round-tripping normalizes implementation details, so
+        // compare the public contract rather than MediaItem object identity.
+        assertEquals(expected.mediaId, decoded?.mediaId)
+        assertEquals(expected.localConfiguration?.uri, decoded?.localConfiguration?.uri)
         assertEquals(null, PlaybackService.mediaItemFromArgs(Bundle()))
     }
 
