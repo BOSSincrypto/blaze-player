@@ -29,6 +29,8 @@ class PlaybackService : MediaSessionService() {
         @Volatile private var sharedSession: MediaSession? = null
         fun playerInstance(): ExoPlayer? = sharedPlayer
         @Volatile var state: PlaybackState = PlaybackState()
+        /** Process-local sink used by the service and its player listeners. */
+        val performance = PerformanceInstrumentation()
 
     }
     private lateinit var session: MediaSession
@@ -37,15 +39,37 @@ class PlaybackService : MediaSessionService() {
     private val settingsScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
     internal val playerListener = object : Player.Listener {
+        override fun onRenderedFirstFrame() {
+            performance.boundary(PerformanceStage.FIRST_RENDERED_FRAME, currentSource())
+        }
+
+        override fun onIsLoadingChanged(isLoading: Boolean) {
+            if (isLoading && isHttpSource()) {
+                performance.boundary(PerformanceStage.HTTP_REQUEST, currentSource())
+            }
+        }
+
+        override fun onPositionDiscontinuity(reason: Int) {
+            if (reason == Player.DISCONTINUITY_REASON_SEEK && isHttpSource()) {
+                performance.boundary(PerformanceStage.HTTP_SEEK, currentSource())
+            }
+        }
+
         override fun onPlaybackStateChanged(state: Int) {
             val player = sharedPlayer ?: return
-            if (state == Player.STATE_BUFFERING) updateState(PlaybackState(PlaybackStatus.LOADING, mediaId = player.currentMediaItem?.mediaId))
+            if (state == Player.STATE_BUFFERING) {
+                if (isHttpSource()) performance.boundary(PerformanceStage.HTTP_BUFFER, currentSource())
+                updateState(PlaybackState(PlaybackStatus.LOADING, mediaId = player.currentMediaItem?.mediaId))
+            }
             if (state == Player.STATE_READY) updateState(PlaybackState(PlaybackStatus.READY, mediaId = player.currentMediaItem?.mediaId))
             if (state == Player.STATE_READY && autoplayPending && preparedMediaId == player.currentMediaItem?.mediaId) {
                 autoplayPending = false
                 player.play()
             }
         }
+
+        private fun currentSource(): String? = sharedPlayer?.currentMediaItem?.localConfiguration?.uri?.toString()
+        private fun isHttpSource(): Boolean = currentSource()?.let { it.startsWith("http://") || it.startsWith("https://") } == true
 
         override fun onPlayerError(error: androidx.media3.common.PlaybackException) {
             // A failed prepare must never leave a later reconnect or retry with stale autoplay.
@@ -82,8 +106,10 @@ class PlaybackService : MediaSessionService() {
                     .add(setPlaybackSpeed)
                     .build())
             override fun onCustomCommand(session: MediaSession, controller: MediaSession.ControllerInfo, customCommand: SessionCommand, args: Bundle): ListenableFuture<SessionResult> {
+                performance.boundary(PerformanceStage.DISPATCH, args.getParcelable<MediaItem>("media_item")?.localConfiguration?.uri?.toString())
                 if (customCommand == setPlaybackSpeed) {
                     setGlobalPlaybackSpeed(args.getFloat("speed", PlaybackSpeedStore.DEFAULT))
+                    performance.boundary(PerformanceStage.POSITION_ACKNOWLEDGEMENT)
                     return Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS))
                 }
                 if (customCommand == prepareAndAutoplay || customCommand == retryPreparation) {
@@ -99,6 +125,7 @@ class PlaybackService : MediaSessionService() {
                         session.player.prepare()
                     }
                 }
+                performance.boundary(PerformanceStage.POSITION_ACKNOWLEDGEMENT, args.getParcelable<MediaItem>("media_item")?.localConfiguration?.uri?.toString())
                 return Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS))
             }
             }).build().also { sharedSession = it }

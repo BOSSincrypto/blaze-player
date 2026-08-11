@@ -45,6 +45,9 @@ class PerformanceInstrumentation(
         events.addLast(PerformanceEvent(stage, elapsedMs, redactSource(source)))
     }
 
+    /** Records an instantaneous runtime boundary without exposing source details. */
+    fun boundary(stage: PerformanceStage, source: String? = null) = record(stage, 0L, source)
+
     fun snapshot(): List<PerformanceEvent> = events.toList()
 
     fun report(): PerformanceReport = PerformanceReport(
