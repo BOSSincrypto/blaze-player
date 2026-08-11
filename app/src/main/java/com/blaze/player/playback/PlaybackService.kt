@@ -7,6 +7,7 @@ import android.os.Build
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
+import androidx.media3.common.Timeline
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.session.MediaSession
 import androidx.media3.session.MediaSessionService
@@ -66,7 +67,14 @@ class PlaybackService : MediaSessionService() {
     }
     private val runtimeReconciler = com.blaze.player.persistence.RuntimePlaylistReconciler()
     private val runtimePlaylist = object : RuntimePlaylist {
-        override fun mediaIds(): List<String> = sharedPlayer?.mediaItems?.map { it.mediaId } ?: emptyList()
+        override fun mediaIds(): List<String> {
+            val timeline = sharedPlayer?.currentTimeline ?: return emptyList()
+            if (timeline.isEmpty) return emptyList()
+            val window = Timeline.Window()
+            return (0 until timeline.windowCount).mapNotNull { index ->
+                timeline.getWindow(index, window).mediaItem.mediaId.takeIf { it.isNotEmpty() }
+            }
+        }
         override fun replaceMediaIds(ids: List<String>) {
             val player = sharedPlayer ?: return
             player.setMediaItems(ids.map { MediaItem.Builder().setMediaId(it).setUri(Uri.parse(it)).build() })
