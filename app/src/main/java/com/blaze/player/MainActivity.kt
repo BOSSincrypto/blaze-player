@@ -19,6 +19,7 @@ import com.blaze.player.source.ContentResolverSourceAccess
 import com.blaze.player.source.SourceNormalizer
 import android.content.Intent
 import android.net.Uri
+import android.app.PictureInPictureParams
 import com.google.common.util.concurrent.ListenableFuture
 
 class MainActivity : ComponentActivity() {
@@ -178,6 +179,17 @@ class MainActivity : ComponentActivity() {
         super.onNewIntent(intent)
         setIntent(intent)
         controller?.let { handleIntent(intent, it) }
+    }
+
+    override fun onUserLeaveHint() {
+        super.onUserLeaveHint()
+        // PiP changes only the Activity surface. Playback remains owned by the
+        // MediaSessionService and its controller-backed player.
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O &&
+            controller?.isPlaying == true && !isInPictureInPictureMode
+        ) {
+            enterPictureInPictureMode(PictureInPictureParams.Builder().build())
+        }
     }
 
     override fun onDestroy() {

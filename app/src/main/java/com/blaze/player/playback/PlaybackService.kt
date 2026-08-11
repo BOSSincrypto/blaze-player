@@ -1,6 +1,9 @@
 package com.blaze.player.playback
 
 import android.os.Bundle
+import android.app.NotificationChannel
+import android.app.NotificationManager
+import android.os.Build
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
@@ -28,6 +31,8 @@ import kotlinx.coroutines.withContext
 
 class PlaybackService : MediaSessionService() {
     companion object {
+        const val NOTIFICATION_CHANNEL_ID = "blaze_playback"
+        const val NOTIFICATION_CHANNEL_NAME = "Playback"
         val prepareAndAutoplay = SessionCommand("com.blaze.player.PREPARE_AUTOPLAY", Bundle.EMPTY)
         val retryPreparation = SessionCommand("com.blaze.player.RETRY_PREPARATION", Bundle.EMPTY)
         val setPlaybackSpeed = SessionCommand("com.blaze.player.SET_PLAYBACK_SPEED", Bundle.EMPTY)
@@ -72,6 +77,7 @@ class PlaybackService : MediaSessionService() {
         }
 
         override fun onPositionDiscontinuity(reason: Int) {
+            if (reason == Player.DISCONTINUITY_REASON_SEEK) checkpoint(false)
             if (reason == Player.DISCONTINUITY_REASON_SEEK && isHttpSource()) {
                 performance.boundary(PerformanceStage.HTTP_SEEK, currentSource())
             }
@@ -149,13 +155,23 @@ class PlaybackService : MediaSessionService() {
 
     override fun onCreate() {
         super.onCreate()
+        createNotificationChannel()
         playbackRepository = PlaybackRepository(
             Room.databaseBuilder(applicationContext, PlaybackDatabase::class.java, "playback.db")
                 .addMigrations(PlaybackDatabase.MIGRATION_1_2)
                 .build()
         )
         val player = synchronized(singletonLock) {
-            sharedPlayer ?: ExoPlayer.Builder(applicationContext).build().also { created ->
+            sharedPlayer ?: ExoPlayer.Builder(applicationContext)
+                .setAudioAttributes(
+                    androidx.media3.common.AudioAttributes.Builder()
+                        .setUsage(C.USAGE_MEDIA)
+                        .setContentType(C.AUDIO_CONTENT_TYPE_MOVIE)
+                        .build(),
+                    true
+                )
+                .setHandleAudioBecomingNoisy(true)
+                .build().also { created ->
                 sharedPlayer = created
                 created.addListener(playerListener)
             }
@@ -246,7 +262,26 @@ class PlaybackService : MediaSessionService() {
 
     override fun onDestroy() {
         // Keep the singleton alive across Activity/service reconnects. Process teardown releases it.
+        checkpoint(false)
         super.onDestroy()
+    }
+
+    override fun onTaskRemoved(rootIntent: android.content.Intent?) {
+        // Removing the task is not a stop request. The MediaSessionService and
+        // its notification remain authoritative for active background playback.
+        checkpoint(false)
+        super.onTaskRemoved(rootIntent)
+    }
+
+    private fun createNotificationChannel() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+            val channel = NotificationChannel(
+                NOTIFICATION_CHANNEL_ID,
+                NOTIFICATION_CHANNEL_NAME,
+                NotificationManager.IMPORTANCE_LOW
+            ).apply { description = "Media playback controls" }
+            getSystemService(NotificationManager::class.java)?.createNotificationChannel(channel)
+        }
     }
 
     /** Updates the global setting; the DataStore observer applies it to current and future items. */

@@ -74,6 +74,20 @@ Real pause/play and seek p95, first-frame and HTTP-seek latency, PiP,
 screen-off audio, notification/hardware controls, and codec/decoder behavior
 remain **unverified** until a CI/device validation run provides evidence.
 
+## Background playback and PiP wiring
+
+`PlaybackService` is the only component that constructs the Media3 player and
+MediaSession. It configures media audio focus and `handleAudioBecomingNoisy`,
+creates the low-importance `blaze_playback` notification channel, and
+checkpoints on pause, seek acknowledgement, task removal, and service teardown.
+The manifest explicitly declares `MediaSessionService`,
+`foregroundServiceType="mediaPlayback"`, the matching foreground-service
+permissions, notification permission, and Activity PiP support. Removing the
+task is not a stop request, so active service playback is retained. On Android
+13+, notification permission may be denied without changing playback policy;
+the platform notification shade and actual screen-off/PiP behavior remain
+unverified in the reduced validation environment.
+
 The single CI-gated fake HTTP matrix is defined in
 `.github/workflows/http-source-matrix.yml`. After the required Android gate it
 checks bounded redirects, byte ranges, authentication failures without
