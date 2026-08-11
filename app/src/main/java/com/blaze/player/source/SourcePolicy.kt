@@ -93,7 +93,13 @@ object SourceNormalizer {
         // A revoked provider grant may surface as either false or a provider
         // exception. Limit the exception conversion to the access check: a
         // readable grant must proceed to media-item construction unchanged.
-        val readable = runCatching { access.openForPlayback(uri) }.getOrDefault(false)
+        val readable = try {
+            access.openForPlayback(uri)
+        } catch (_: RuntimeException) {
+            // Providers commonly report a revoked persisted grant by throwing
+            // SecurityException instead of returning false.
+            false
+        }
         if (!readable) return SourceResult.Rejected(Reason.NOT_READABLE)
         return SourceResult.Accepted(MediaItem.fromUri(uri), source.copy(uri = uri))
     }
