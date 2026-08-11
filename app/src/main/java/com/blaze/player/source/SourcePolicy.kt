@@ -4,6 +4,8 @@ import android.content.Intent
 import android.net.Uri
 import androidx.media3.common.MediaItem
 import java.net.URI
+import java.net.URLDecoder
+import java.nio.charset.StandardCharsets
 
 sealed interface SourceResult {
     data class Accepted(val mediaItem: MediaItem, val source: NormalizedSource) : SourceResult
@@ -79,23 +81,32 @@ object SourceNormalizer {
         }
         if (parsed.userInfo != null) return SourceResult.Rejected(Reason.CREDENTIALS_NOT_ALLOWED)
         val path = parsed.path.orEmpty().lowercase()
-        if (path.endsWithAny(".m3u8", ".mpd") || parsed.query.orEmpty().contains("manifest", true)) {
-            return SourceResult.Rejected(Reason.ADAPTIVE_NOT_SUPPORTED)
-        }
         if (containsDrmMarker(parsed.rawQuery) || containsDrmMarker(parsed.rawFragment) ||
             metadata.any { containsDrmMarker(it.key) || containsDrmMarker(it.value) }) {
             return SourceResult.Rejected(Reason.UNSUPPORTED_MEDIA)
+        }
+        if (path.endsWithAny(".m3u8", ".mpd") || parsed.query.orEmpty().contains("manifest", true)) {
+            return SourceResult.Rejected(Reason.ADAPTIVE_NOT_SUPPORTED)
         }
         return SourceResult.Accepted(MediaItem.fromUri(uri), NormalizedSource(uri, local = false))
     }
 
     private fun containsDrmMarker(value: String?): Boolean {
         if (value.isNullOrBlank()) return false
-        return value.split('&', ';', '=', '?', '/', ':', ',', '#', '_', '-', '.')
+        // Query/fragment values are commonly percent-encoded (including nested
+        // license URLs). Inspect the decoded representation so encoding cannot
+        // turn an explicitly unsupported DRM source into progressive media.
+        val decoded = runCatching {
+            URLDecoder.decode(value, StandardCharsets.UTF_8.name())
+        }.getOrDefault(value)
+        return decoded.split('&', ';', '=', '?', '/', ':', ',', '#')
             .asSequence()
             .map(String::trim)
             .filter(String::isNotEmpty)
-            .any { token -> drmMarkers.any { marker -> token.equals(marker, ignoreCase = true) } }
+            .any { token ->
+                val compactToken = token.filter(Char::isLetterOrDigit)
+                drmMarkers.any { marker -> compactToken.equals(marker, ignoreCase = true) }
+            }
     }
 
     private fun String.endsWithAny(vararg suffixes: String) = suffixes.any { endsWith(it) }
