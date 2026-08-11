@@ -16,6 +16,7 @@ import com.blaze.player.persistence.PlaybackDatabase
 import com.blaze.player.persistence.PlaybackRepository
 import com.blaze.player.persistence.RuntimePlaylist
 import com.blaze.player.persistence.SourceIdentity
+import com.blaze.player.persistence.CheckpointCoalescer
 import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
 import kotlinx.coroutines.CoroutineScope
@@ -45,6 +46,11 @@ class PlaybackService : MediaSessionService() {
     private var resumedMediaId: String? = null
     private val settingsScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private lateinit var playbackRepository: PlaybackRepository
+    private data class Checkpoint(val identity: String, val positionMs: Long, val durationMs: Long?, val completed: Boolean, val nowMs: Long)
+    private val checkpointCoalescer = CheckpointCoalescer<Checkpoint> { value ->
+        playbackRepository.savePosition(value.identity, value.positionMs, value.durationMs, value.nowMs)
+        playbackRepository.recordOpen(value.identity, value.nowMs, value.completed)
+    }
     private val runtimeReconciler = com.blaze.player.persistence.RuntimePlaylistReconciler()
     private val runtimePlaylist = object : RuntimePlaylist {
         override fun mediaIds(): List<String> = sharedPlayer?.mediaItems?.map { it.mediaId } ?: emptyList()
@@ -122,9 +128,10 @@ class PlaybackService : MediaSessionService() {
         val position = player.currentPosition.coerceAtLeast(0L)
         val duration = player.duration.takeIf { it != C.TIME_UNSET && it >= 0L }
         val completed = forceCompletion || PlaybackRepository.isCompleted(position, duration)
+        val now = System.currentTimeMillis()
         settingsScope.launch {
-            playbackRepository.savePosition(identity, position, duration, System.currentTimeMillis())
-            playbackRepository.recordOpen(identity, System.currentTimeMillis(), completed)
+            checkpointCoalescer.submit(Checkpoint(identity, position, duration, completed, now))
+            checkpointCoalescer.flush()
         }
     }
 
@@ -188,29 +195,42 @@ class PlaybackService : MediaSessionService() {
                             .getOrDefault(false)
                     // Reconnects or duplicate intent delivery must not reprepare the
                     // authoritative item. A genuinely new selection still replaces it.
-                    if (item != null && item.localConfiguration?.uri?.scheme == "content" &&
-                        !runCatching {
-                            applicationContext.contentResolver.openAssetFileDescriptor(
-                                item.localConfiguration!!.uri, "r"
-                            )?.use { true } == true
-                        }.getOrDefault(false)
-                    ) {
-                        autoplayTransitions.failed(item.mediaId)
-                        updateState(PlaybackState(PlaybackStatus.ERROR, PlaybackError(
-                            "Video unavailable",
-                            "This video is no longer accessible. Re-select it from storage.",
-                            false
-                        ), item.mediaId))
-                    } else if (item != null && (customCommand == retryPreparation || !(item.mediaId == preparedMediaId &&
+                    if (item != null && (customCommand == retryPreparation || !(item.mediaId == preparedMediaId &&
                                 session.player.currentMediaItem?.mediaId == item.mediaId)) {
                         preparedMediaId = item.mediaId
                         val effects = autoplayTransitions.request(item.mediaId, context, retry = customCommand == retryPreparation)
                         if (effects.contains(AutoplayTransitionController.Effect.PREPARE)) {
                             updateState(PlaybackState(PlaybackStatus.LOADING, mediaId = item.mediaId))
-                            session.player.setMediaItem(item)
-                            session.player.prepare()
-                            val identity = SourceIdentity.canonical(item.localConfiguration?.uri ?: Uri.EMPTY)
-                            settingsScope.launch { playbackRepository.recordOpen(identity, System.currentTimeMillis()) }
+                            // Content providers may block while checking a revoked
+                            // grant. Keep that boundary off the service command thread.
+                            settingsScope.launch {
+                                val readable = withContext(Dispatchers.IO) {
+                                    if (item.localConfiguration?.uri?.scheme == "content") {
+                                        runCatching {
+                                            applicationContext.contentResolver.openAssetFileDescriptor(
+                                                item.localConfiguration!!.uri, "r"
+                                            )?.use { true } == true
+                                        }.getOrDefault(false)
+                                    } else true
+                                }
+                                withContext(Dispatchers.Main) {
+                                    if (!readable) {
+                                        autoplayTransitions.failed(item.mediaId)
+                                        updateState(PlaybackState(PlaybackStatus.ERROR, PlaybackError(
+                                            "Video unavailable",
+                                            "This video is no longer accessible. Re-select it from storage.",
+                                            false
+                                        ), item.mediaId))
+                                    } else if (preparedMediaId == item.mediaId) {
+                                        session.player.setMediaItem(item)
+                                        session.player.prepare()
+                                    }
+                                }
+                                if (readable) {
+                                    val identity = SourceIdentity.canonical(item.localConfiguration?.uri ?: Uri.EMPTY)
+                                    playbackRepository.recordOpen(identity, System.currentTimeMillis())
+                                }
+                            }
                         }
                     }
                 }

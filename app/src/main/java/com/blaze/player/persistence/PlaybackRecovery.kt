@@ -10,7 +10,9 @@ data class DurableRecoverySnapshot(
     val orderedSourceIdentities: List<String>,
     val positionMs: Long,
     val completed: Boolean,
-    val speed: Float
+    val speed: Float,
+    /** Durable recovery never carries an implicit request to start playback. */
+    val autoplay: Boolean = false
 )
 
 object PlaybackRecoveryPolicy {
@@ -25,7 +27,8 @@ object PlaybackRecoveryPolicy {
         orderedSourceIdentities = orderedSourceIdentities.distinct(),
         positionMs = PlaybackRepository.resumePosition(position, completed),
         completed = completed,
-        speed = speed
+        speed = speed,
+        autoplay = false
     )
 
     /** Process death creates a new runtime identity; all other outcomes are explicit. */
@@ -63,6 +66,16 @@ class CheckpointCoalescer<T>(private val write: suspend (T) -> Unit) {
 
 enum class StoreOwner { ROOM, DATASTORE }
 
+/** Explicit ownership prevents a reset/fault in one store from being treated
+ * as evidence that the other store is empty or corrupt. */
+object PersistenceStoreOwnership {
+    fun owner(field: String): StoreOwner = when (field) {
+        "source", "playlist", "playlist_entry", "history", "position" -> StoreOwner.ROOM
+        "global_playback_speed" -> StoreOwner.DATASTORE
+        else -> error("Unknown persistence field")
+    }
+}
+
 object PrivacyRedactor {
     /** Safe diagnostics retain host/scheme only and never retain local path details. */
     fun source(value: String?): String = value?.let {
@@ -87,4 +100,5 @@ object PrivacyRedactor {
         .replace(Regex("(?i)(https?://[^\\s?#]+)[?#][^\\s]+"), "$1")
         // Avoid turning local filesystem/provider details into diagnostics.
         .replace(Regex("(?i)[A-Z]:\\\\(?:[^\\s,;]+)"), "[REDACTED-PATH]")
+        .replace(Regex("(?m)(^|[=\\s])/(?:[^\\s,;]+/)*[^\\s,;]+"), "$1[REDACTED-PATH]")
 }

@@ -24,6 +24,8 @@ class PlaybackRecoveryTest {
         assertEquals(0, PlaybackRecoveryPolicy.coldStart("a", listOf("a"), PlaybackPositionEntity("a", 99, 1), true, 1f).positionMs)
         assertEquals(LifecycleOutcome.NEW_PLAYER_FROM_DURABLE, PlaybackRecoveryPolicy.lifecycleOutcome(LifecycleEvent.PROCESS_DIED, true))
         assertEquals(LifecycleOutcome.RETAIN_PLAYER, PlaybackRecoveryPolicy.lifecycleOutcome(LifecycleEvent.PIP_ENTERED, true))
+        assertEquals(LifecycleOutcome.RESTORE_DURABLE, PlaybackRecoveryPolicy.lifecycleOutcome(LifecycleEvent.SERVICE_RESTARTED, false))
+        assertEquals(false, PlaybackRecoveryPolicy.coldStart("a", listOf("a"), null, false, 1f).autoplay)
     }
 
     @Test fun `checkpoint coalescer retains latest acknowledged state`() = runBlocking {
@@ -33,6 +35,12 @@ class PlaybackRecoveryTest {
         coalescer.submit(2)
         coalescer.flush()
         assertEquals(listOf(2), writes)
+    }
+
+    @Test fun `store ownership is isolated and explicit`() {
+        assertEquals(StoreOwner.ROOM, PersistenceStoreOwnership.owner("position"))
+        assertEquals(StoreOwner.ROOM, PersistenceStoreOwnership.owner("playlist"))
+        assertEquals(StoreOwner.DATASTORE, PersistenceStoreOwnership.owner("global_playback_speed"))
     }
 
     @Test fun `privacy redaction removes local details and URL secrets`() {
@@ -49,6 +57,12 @@ class PlaybackRecoveryTest {
         assertTrue(!safe.contains("access_token=secret"))
         assertTrue(!safe.contains("C:\\Users\\boss"))
         assertTrue(safe.contains("https://[REDACTED]@example.test/video.mp4"))
+    }
+
+    @Test fun `privacy metadata redacts unix local paths`() {
+        val safe = PrivacyRedactor.metadata("path=/private/user/video.mp4")
+        assertTrue(!safe.contains("/private/user/video.mp4"))
+        assertTrue(safe.contains("[REDACTED-PATH]"))
     }
 
 }
