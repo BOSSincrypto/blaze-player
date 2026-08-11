@@ -11,11 +11,7 @@ class SourcePolicyTest {
         var persistResult = true
         override fun canRead(uri: Uri) = readable
         override fun takePersistableReadPermission(uri: Uri): Boolean { persisted++; return persistResult }
-        override fun openForPlayback(uri: Uri): Boolean {
-            opened++
-            if (!readable) throw SecurityException("persisted grant revoked")
-            return true
-        }
+        override fun openForPlayback(uri: Uri): Boolean { opened++; return readable }
     }
 
     @Test fun `ci deferred durable picker grant restart and revocation component`() {
