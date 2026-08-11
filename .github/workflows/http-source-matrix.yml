@@ -36,7 +36,7 @@ jobs:
             exit 1
           }
       - name: Run durable picker grant component test once
-        run: ./gradlew --no-daemon testDebugUnitTest --tests 'com.blaze.player.source.SourcePolicyTest.ciDeferredDurablePickerGrantRestartAndRevocationComponent'
+        run: ./gradlew --no-daemon testDebugUnitTest --tests 'com.blaze.player.source.SourcePolicyTest.ci deferred durable picker grant restart and revocation component'
       - name: Run fake HTTP data-source component test once
         env:
           GITHUB_ACTIONS: 'true'

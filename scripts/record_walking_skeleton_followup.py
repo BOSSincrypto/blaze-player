@@ -12,7 +12,10 @@ OUT = Path(os.environ.get("FOLLOWUP_EVIDENCE", "build/reports/walking-skeleton-f
 HTTP = Path(os.environ.get("HTTP_MATRIX_REPORT", "build/reports/http-source-matrix.json"))
 
 CASES = {
-    "VAL-PLAYER-002": ("com.blaze.player.source.SourcePolicyTest", "ciDeferredDurablePickerGrantRestartAndRevocationComponent"),
+    # Kotlin/JUnit emits backtick-free method names in XML as a display name
+    # with camel-case word boundaries. Keep this contract tied to the XML,
+    # not the JVM method identifier used by Gradle's test filter.
+    "VAL-PLAYER-002": ("com.blaze.player.source.SourcePolicyTest", "ci deferred durable picker grant restart and revocation component"),
     "VAL-PLAYER-008": ("com.blaze.player.playback.AutoplayTransitionControllerTest", "ci deferred autoplay service transition component"),
 }
 
@@ -22,8 +25,8 @@ def test_cases(classname, name):
     for report in Path("app/build/test-results").glob("**/TEST-*.xml"):
         try:
             root = ET.parse(report).getroot()
-        except (ET.ParseError, OSError):
-            continue
+        except (ET.ParseError, OSError) as exc:
+            raise RuntimeError(f"unparseable test report: {report}: {exc}") from exc
         for case in root.iter("testcase"):
             if case.attrib.get("classname") == classname and case.attrib.get("name") == name:
                 matches.append({
