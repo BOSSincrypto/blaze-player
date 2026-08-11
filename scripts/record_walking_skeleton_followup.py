@@ -19,10 +19,20 @@ CASES = {
     "VAL-PLAYER-008": ("com.blaze.player.playback.AutoplayTransitionControllerTest", "ci deferred autoplay service transition component"),
 }
 
+EVIDENCE_DIRS = {
+    "com.blaze.player.source.SourcePolicyTest": Path(
+        "build/reports/deferred-test-evidence/source-policy"
+    ),
+    "com.blaze.player.playback.AutoplayTransitionControllerTest": Path(
+        "build/reports/deferred-test-evidence/autoplay"
+    ),
+}
+
 
 def test_cases(classname, name):
     matches = []
-    for report in Path("app/build/test-results").glob("**/TEST-*.xml"):
+    report_dir = EVIDENCE_DIRS[classname]
+    for report in report_dir.glob("TEST-*.xml"):
         try:
             root = ET.parse(report).getroot()
         except (ET.ParseError, OSError) as exc:

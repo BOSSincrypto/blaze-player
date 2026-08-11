@@ -41,6 +41,19 @@ jobs:
           ./gradlew --no-daemon testDebugUnitTest \
             --tests 'com.blaze.player.source.SourcePolicyTest' \
             --tests 'com.blaze.player.playback.AutoplayTransitionControllerTest'
+      - name: Preserve deferred test XML before later checks
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p build/reports/deferred-test-evidence/source-policy \
+            build/reports/deferred-test-evidence/autoplay
+          find app/build/test-results -type f \
+            -name 'TEST-com.blaze.player.source.SourcePolicyTest.xml' \
+            -exec cp -- {} build/reports/deferred-test-evidence/source-policy/ \; || true
+          find app/build/test-results -type f \
+            -name 'TEST-com.blaze.player.playback.AutoplayTransitionControllerTest.xml' \
+            -exec cp -- {} build/reports/deferred-test-evidence/autoplay/ \; || true
       - name: Run fake HTTP data-source component test once
         continue-on-error: true
         env:
@@ -61,6 +74,7 @@ jobs:
           path: |
             build/reports/http-source-matrix.json
             build/reports/walking-skeleton-followup/evidence.json
+            build/reports/deferred-test-evidence/**
             app/build/test-results/**
             app/build/reports/**
           if-no-files-found: warn
