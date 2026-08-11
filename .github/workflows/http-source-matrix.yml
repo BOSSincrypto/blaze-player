@@ -35,23 +35,69 @@ jobs:
             echo "Android API 31+ is required; no compatible platform was found" >&2
             exit 1
           }
-      - name: Run deferred component tests once
-        continue-on-error: true
-        run: |
-          ./gradlew --no-daemon testDebugUnitTest \
-            --tests 'com.blaze.player.source.SourcePolicyTest' \
-            --tests 'com.blaze.player.playback.AutoplayTransitionControllerTest'
-      - name: Preserve deferred test XML before later checks
+      - name: Run deferred component tests once and snapshot XML
         if: always()
+        continue-on-error: true
         shell: bash
         run: |
           set -euo pipefail
           mkdir -p build/reports/deferred-test-evidence/source-policy \
             build/reports/deferred-test-evidence/autoplay
+
+          # Do not mistake reports left by a previous Gradle invocation for
+          # evidence from this run. The two fixtures are deliberately run in
+          # separate invocations so each report is copied immediately after
+          # the invocation that produced it.
+          run_and_snapshot() {
+            local classname="$1"
+            local destination="$2"
+            local report_name="TEST-${classname}.xml"
+            local status=0
+            find "$destination" -type f -delete
+            if [[ -d app/build/test-results/testDebugUnitTest ]]; then
+              find app/build/test-results/testDebugUnitTest -type f -delete
+              find app/build/test-results/testDebugUnitTest -depth -type d -empty -delete
+            fi
+            ./gradlew --no-daemon testDebugUnitTest --tests "$classname" || status=$?
+
+            local reports=()
+            while IFS= read -r -d '' report; do
+              reports+=("$report")
+            done < <(find app/build/test-results -type f -name "$report_name" -print0 2>/dev/null)
+            if (( ${#reports[@]} != 1 )); then
+              printf 'Expected exactly one %s XML report, found %s\n' \
+                "$classname" "${#reports[@]}" >&2
+              printf '%s\n' "${reports[@]}" >&2
+              return 1
+            fi
+            # A read-only destination is an immutable snapshot for all later
+            # steps; recorder.py must consume this copy, not a live Gradle file.
+            install -m 0444 -- "${reports[0]}" "$destination/$report_name"
+            return "$status"
+          }
+
+          test_status=0
+          if ! run_and_snapshot \
+            'com.blaze.player.source.SourcePolicyTest' \
+            build/reports/deferred-test-evidence/source-policy; then
+            test_status=1
+          fi
+          if ! run_and_snapshot \
+            'com.blaze.player.playback.AutoplayTransitionControllerTest' \
+            build/reports/deferred-test-evidence/autoplay; then
+            test_status=1
+          fi
+          exit "$test_status"
+
+      - name: Verify deferred test XML snapshots
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
           source_reports=()
           while IFS= read -r -d '' report; do
             source_reports+=("$report")
-          done < <(find app/build/test-results -type f \
+          done < <(find build/reports/deferred-test-evidence/source-policy -type f \
             -name 'TEST-com.blaze.player.source.SourcePolicyTest.xml' -print0)
           if (( ${#source_reports[@]} != 1 )); then
             printf 'Expected exactly one SourcePolicyTest XML report, found %s\n' \
@@ -59,13 +105,10 @@ jobs:
             printf '%s\n' "${source_reports[@]}" >&2
             exit 1
           fi
-          cp -- "${source_reports[0]}" \
-            build/reports/deferred-test-evidence/source-policy/
-
           autoplay_reports=()
           while IFS= read -r -d '' report; do
             autoplay_reports+=("$report")
-          done < <(find app/build/test-results -type f \
+          done < <(find build/reports/deferred-test-evidence/autoplay -type f \
             -name 'TEST-com.blaze.player.playback.AutoplayTransitionControllerTest.xml' -print0)
           if (( ${#autoplay_reports[@]} != 1 )); then
             printf 'Expected exactly one AutoplayTransitionControllerTest XML report, found %s\n' \
@@ -73,8 +116,6 @@ jobs:
             printf '%s\n' "${autoplay_reports[@]}" >&2
             exit 1
           fi
-          cp -- "${autoplay_reports[0]}" \
-            build/reports/deferred-test-evidence/autoplay/
       - name: Run fake HTTP data-source component test once
         continue-on-error: true
         env:
