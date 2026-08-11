@@ -19,6 +19,8 @@ import com.blaze.player.source.SourceNormalizer
 import com.blaze.player.source.SourceResult
 import com.blaze.player.source.LocalSourceAccess
 import android.net.Uri
+import android.os.Bundle
+import androidx.media3.common.MediaItem
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -63,6 +65,16 @@ class CrossAreaContractTest {
         assertTrue(AutoplayPolicy.allows(AutoplayRequest(AutoplayContext.SHARE, "https://example.test/video.mp4")))
         assertFalse(AutoplayPolicy.allows(AutoplayRequest(AutoplayContext.RECONNECT, "https://example.test/video.mp4")))
         assertTrue(PlaybackService.playerInstance() == null || PlaybackService.playerInstance() === PlaybackService.playerInstance())
+    }
+
+    @Test fun `custom command media item payload decodes from nested bundle`() {
+        val expected = MediaItem.Builder().setMediaId("test-id").setUri("https://example.test/video.mp4").build()
+        val args = Bundle().apply {
+            putBundle(PlaybackService.MEDIA_ITEM_ARGUMENT_KEY, expected.toBundle())
+        }
+
+        assertEquals(expected, PlaybackService.mediaItemFromArgs(args))
+        assertEquals(null, PlaybackService.mediaItemFromArgs(Bundle()))
     }
 
     @Test fun `cross-area diagnostics redact credentials and private paths`() {

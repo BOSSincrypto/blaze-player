@@ -33,6 +33,7 @@ class PlaybackService : MediaSessionService() {
     companion object {
         const val NOTIFICATION_CHANNEL_ID = "blaze_playback"
         const val NOTIFICATION_CHANNEL_NAME = "Playback"
+        const val MEDIA_ITEM_ARGUMENT_KEY = "media_item"
         val prepareAndAutoplay = SessionCommand("com.blaze.player.PREPARE_AUTOPLAY", Bundle.EMPTY)
         val retryPreparation = SessionCommand("com.blaze.player.RETRY_PREPARATION", Bundle.EMPTY)
         val setPlaybackSpeed = SessionCommand("com.blaze.player.SET_PLAYBACK_SPEED", Bundle.EMPTY)
@@ -44,6 +45,12 @@ class PlaybackService : MediaSessionService() {
         @Volatile var state: PlaybackState = PlaybackState()
         /** Process-local sink used by the service and its player listeners. */
         val performance = PerformanceInstrumentation()
+
+        /** Decode the Bundleable payload used by custom session commands. */
+        internal fun mediaItemFromArgs(args: Bundle): MediaItem? =
+            args.getBundle(MEDIA_ITEM_ARGUMENT_KEY)?.let { bundle ->
+                runCatching { MediaItem.CREATOR.fromBundle(bundle) }.getOrNull()
+            }
 
     }
     private lateinit var session: MediaSession
@@ -193,9 +200,7 @@ class PlaybackService : MediaSessionService() {
                     .add(stopPlayback)
                     .build())
             override fun onCustomCommand(session: MediaSession, controller: MediaSession.ControllerInfo, customCommand: SessionCommand, args: Bundle): ListenableFuture<SessionResult> {
-                val item = args.getBundle("media_item")?.let { bundle ->
-                    runCatching { MediaItem.CREATOR.fromBundle(bundle) }.getOrNull()
-                }
+                val item = mediaItemFromArgs(args)
                 performance.boundary(PerformanceStage.DISPATCH, item?.localConfiguration?.uri?.toString())
                 if (customCommand == setPlaybackSpeed) {
                     setGlobalPlaybackSpeed(args.getFloat("speed", PlaybackSpeedStore.DEFAULT))
