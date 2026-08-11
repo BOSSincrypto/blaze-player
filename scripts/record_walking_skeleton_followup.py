@@ -26,7 +26,10 @@ def test_cases(classname, name):
             continue
         for case in root.iter("testcase"):
             if case.attrib.get("classname") == classname and case.attrib.get("name") == name:
-                matches.append(str(report))
+                matches.append({
+                    "report": str(report),
+                    "failed": any(child.tag in {"failure", "error", "skipped"} for child in case),
+                })
     return matches
 
 
@@ -41,13 +44,15 @@ def main():
     for assertion, (classname, name) in CASES.items():
         reports = test_cases(classname, name)
         count = len(reports)
+        passed_once = count == 1 and not reports[0]["failed"]
         executions.append({
             "assertion": assertion,
-            "status": "pass" if count == 1 else "fail",
+            "status": "pass" if passed_once else "fail",
             "test": f"{classname}.{name}",
             "count": count,
-            "reports": reports,
-            "evidence": reports[0] if count == 1 else str(Path("app/build/test-results")),
+            "reports": [item["report"] for item in reports],
+            "failed": any(item["failed"] for item in reports),
+            "evidence": reports[0]["report"] if count == 1 else str(Path("app/build/test-results")),
         })
     http_checks = http.get("checks", [])
     http_ok = http.get("status") == "verified" and bool(http_checks) and all(c.get("passed") is True for c in http_checks)
@@ -60,7 +65,9 @@ def main():
         "evidence": str(HTTP),
     })
     ci_ok = os.environ.get("GITHUB_ACTIONS", "").lower() == "true"
-    valid = ci_ok and api_ok and http_ok and all(item["count"] == 1 for item in executions)
+    valid = ci_ok and api_ok and http_ok and all(
+        item["count"] == 1 and item["status"] == "pass" for item in executions
+    )
     report = {
         "status": "verified" if valid else "failed",
         "validation": "ci-only-single-execution",
