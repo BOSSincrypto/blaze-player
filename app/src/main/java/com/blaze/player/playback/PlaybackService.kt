@@ -191,14 +191,18 @@ class PlaybackService : MediaSessionService() {
         }
         session = synchronized(singletonLock) {
             sharedSession ?: MediaSession.Builder(this, player).setCallback(object : MediaSession.Callback {
-            override fun onConnect(session: MediaSession, controller: MediaSession.ControllerInfo): MediaSession.ConnectionResult =
-                MediaSession.ConnectionResult.accept(SessionCommands.Builder()
-                    .add(SessionCommand.COMMAND_PLAY_PAUSE)
+            override fun onConnect(session: MediaSession, controller: MediaSession.ControllerInfo): MediaSession.ConnectionResult {
+                val playerCommands = Player.Commands.Builder()
+                    .add(Player.COMMAND_PLAY_PAUSE)
+                    .build()
+                val sessionCommands = SessionCommands.Builder()
                     .add(prepareAndAutoplay)
                     .add(retryPreparation)
                     .add(setPlaybackSpeed)
                     .add(stopPlayback)
-                    .build())
+                    .build()
+                return MediaSession.ConnectionResult.accept(sessionCommands, playerCommands)
+            }
             override fun onCustomCommand(session: MediaSession, controller: MediaSession.ControllerInfo, customCommand: SessionCommand, args: Bundle): ListenableFuture<SessionResult> {
                 val item = mediaItemFromArgs(args)
                 performance.boundary(PerformanceStage.DISPATCH, item?.localConfiguration?.uri?.toString())
