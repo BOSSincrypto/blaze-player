@@ -12,10 +12,9 @@ OUT = Path(os.environ.get("FOLLOWUP_EVIDENCE", "build/reports/walking-skeleton-f
 HTTP = Path(os.environ.get("HTTP_MATRIX_REPORT", "build/reports/http-source-matrix.json"))
 
 CASES = {
-    # Kotlin/JUnit emits backtick-free method names in XML as a display name
-    # with camel-case word boundaries. Keep this contract tied to the XML,
-    # not the JVM method identifier used by Gradle's test filter.
-    "VAL-PLAYER-002": ("com.blaze.player.source.SourcePolicyTest", "ci deferred durable picker grant restart and revocation component"),
+    # XML uses the Kotlin/JUnit method display name. Keep this contract tied
+    # to the emitted report rather than the Gradle test-filter expression.
+    "VAL-PLAYER-002": ("com.blaze.player.source.SourcePolicyTest", "ciDeferredDurablePickerGrantRestartAndRevocationComponent"),
     "VAL-PLAYER-008": ("com.blaze.player.playback.AutoplayTransitionControllerTest", "ci deferred autoplay service transition component"),
 }
 
