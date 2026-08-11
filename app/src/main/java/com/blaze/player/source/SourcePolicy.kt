@@ -23,6 +23,12 @@ interface LocalSourceAccess {
 }
 
 object SourceNormalizer {
+    private val drmMarkers = setOf(
+        "drm", "widevine", "playready", "fairplay", "clearkey", "keysystem",
+        "license", "licenseurl", "licenseuri", "keyid", "contentprotection",
+        "encrypted", "encryption", "cenc", "cbcs", "pssh"
+    )
+
     fun fromPicker(uri: Uri?, access: LocalSourceAccess): SourceResult = normalizeLocal(uri, access)
 
     fun fromIntent(intent: Intent, access: LocalSourceAccess): SourceResult {
@@ -40,10 +46,15 @@ object SourceNormalizer {
     }
 
     fun normalize(uri: Uri?, access: LocalSourceAccess): SourceResult {
+        return normalize(uri, access, emptyMap())
+    }
+
+    /** Normalizes an external URI and optional source metadata through the same policy. */
+    fun normalize(uri: Uri?, access: LocalSourceAccess, metadata: Map<String, String>): SourceResult {
         if (uri == null || uri.toString().isBlank()) return SourceResult.Rejected(Reason.EMPTY)
         return when (uri.scheme?.lowercase()) {
             "content" -> normalizeLocal(uri, access)
-            "http", "https" -> normalizeRemote(uri)
+            "http", "https" -> normalizeRemote(uri, metadata)
             else -> SourceResult.Rejected(Reason.UNSUPPORTED_SCHEME)
         }
     }
@@ -60,7 +71,7 @@ object SourceNormalizer {
         return SourceResult.Accepted(MediaItem.fromUri(uri), NormalizedSource(uri, local = true, persistable = persistable))
     }
 
-    private fun normalizeRemote(uri: Uri): SourceResult {
+    private fun normalizeRemote(uri: Uri, metadata: Map<String, String>): SourceResult {
         val raw = uri.toString()
         val parsed = runCatching { URI(raw) }.getOrNull() ?: return SourceResult.Rejected(Reason.MALFORMED_URL)
         if (parsed.scheme !in listOf("http", "https") || parsed.host.isNullOrBlank()) {
@@ -71,8 +82,20 @@ object SourceNormalizer {
         if (path.endsWithAny(".m3u8", ".mpd") || parsed.query.orEmpty().contains("manifest", true)) {
             return SourceResult.Rejected(Reason.ADAPTIVE_NOT_SUPPORTED)
         }
-        if (parsed.fragment.orEmpty().contains("drm", ignoreCase = true)) return SourceResult.Rejected(Reason.UNSUPPORTED_MEDIA)
+        if (containsDrmMarker(parsed.rawQuery) || containsDrmMarker(parsed.rawFragment) ||
+            metadata.any { containsDrmMarker(it.key) || containsDrmMarker(it.value) }) {
+            return SourceResult.Rejected(Reason.UNSUPPORTED_MEDIA)
+        }
         return SourceResult.Accepted(MediaItem.fromUri(uri), NormalizedSource(uri, local = false))
+    }
+
+    private fun containsDrmMarker(value: String?): Boolean {
+        if (value.isNullOrBlank()) return false
+        return value.split('&', ';', '=', '?', '/', ':', ',', '#', '_', '-', '.')
+            .asSequence()
+            .map(String::trim)
+            .filter(String::isNotEmpty)
+            .any { token -> drmMarkers.any { marker -> token.equals(marker, ignoreCase = true) } }
     }
 
     private fun String.endsWithAny(vararg suffixes: String) = suffixes.any { endsWith(it) }

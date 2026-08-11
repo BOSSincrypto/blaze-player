@@ -39,6 +39,27 @@ class SourcePolicyTest {
         assertEquals(Reason.UNSUPPORTED_MEDIA, (SourceNormalizer.normalize(Uri.parse("https://example.test/movie.mp4?drm=widevine"), Access()) as SourceResult.Rejected).reason)
     }
 
+    @Test fun `drm markers in query and fragment are rejected`() {
+        val urls = listOf(
+            "https://example.test/movie.mp4?license=https%3A%2F%2Flicense.test",
+            "https://example.test/movie.mp4?widevine=true",
+            "https://example.test/movie.mp4#playready",
+            "https://example.test/movie.mp4#track=encrypted&keySystem=clearkey"
+        )
+        urls.forEach { url ->
+            assertEquals(Reason.UNSUPPORTED_MEDIA, (SourceNormalizer.normalize(Uri.parse(url), Access()) as SourceResult.Rejected).reason)
+        }
+    }
+
+    @Test fun `drm metadata is rejected while ordinary metadata remains progressive`() {
+        val uri = Uri.parse("https://example.test/movie.mp4")
+        assertEquals(
+            Reason.UNSUPPORTED_MEDIA,
+            (SourceNormalizer.normalize(uri, Access(), mapOf("contentProtection" to "cenc")) as SourceResult.Rejected).reason
+        )
+        assertTrue(SourceNormalizer.normalize(uri, Access(), mapOf("title" to "A movie")) is SourceResult.Accepted)
+    }
+
     @Test fun `redirect policy blocks downgrade and credentials`() {
         val p = RedirectPolicy()
         assertTrue(p.allows(Uri.parse("http://a.test/x"), Uri.parse("https://b.test/y")))
