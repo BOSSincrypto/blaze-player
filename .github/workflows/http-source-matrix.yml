@@ -35,18 +35,18 @@ jobs:
             echo "Android API 31+ is required; no compatible platform was found" >&2
             exit 1
           }
-      - name: Run durable picker grant component test once
+      - name: Run deferred component tests once
         continue-on-error: true
-        run: ./gradlew --no-daemon testDebugUnitTest --tests 'com.blaze.player.source.SourcePolicyTest'
+        run: |
+          ./gradlew --no-daemon testDebugUnitTest \
+            --tests 'com.blaze.player.source.SourcePolicyTest' \
+            --tests 'com.blaze.player.playback.AutoplayTransitionControllerTest'
       - name: Run fake HTTP data-source component test once
         continue-on-error: true
         env:
           GITHUB_ACTIONS: 'true'
           HTTP_MATRIX_REPORT: build/reports/http-source-matrix.json
         run: python3 scripts/http_source_matrix.py
-      - name: Run autoplay service transition component test once
-        continue-on-error: true
-        run: ./gradlew --no-daemon testDebugUnitTest --tests 'com.blaze.player.playback.AutoplayTransitionControllerTest'
       - name: Record deferred assertion evidence
         if: always()
         shell: bash
