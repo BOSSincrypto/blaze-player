@@ -7,9 +7,11 @@ import org.junit.Test
 class SourcePolicyTest {
     private class Access(private val readable: Boolean = true) : LocalSourceAccess {
         var persisted = 0
+        var opened = 0
         var persistResult = true
         override fun canRead(uri: Uri) = readable
         override fun takePersistableReadPermission(uri: Uri): Boolean { persisted++; return persistResult }
+        override fun openForPlayback(uri: Uri): Boolean { opened++; return readable }
     }
 
     @Test fun `local content is accepted and grant retained`() {
@@ -23,6 +25,31 @@ class SourcePolicyTest {
         val result = SourceNormalizer.fromPicker(Uri.parse("content://provider/video/1"), access)
         assertTrue(result is SourceResult.Accepted)
         assertFalse((result as SourceResult.Accepted).source.persistable)
+    }
+
+    @Test fun `persisted local identity and media id survive recreation`() {
+        val uri = Uri.parse("content://provider/video/1")
+        val first = SourceNormalizer.fromPicker(uri, Access()) as SourceResult.Accepted
+        val recreated = SourceNormalizer.reopen(first.source, Access()) as SourceResult.Accepted
+        assertEquals(first.source.identity, recreated.source.identity)
+        assertEquals(first.mediaItem.mediaId, recreated.mediaItem.mediaId)
+        assertEquals(uri.toString(), recreated.source.identity)
+    }
+
+    @Test fun `revoked persisted grant fails safely during playback preparation`() {
+        val uri = Uri.parse("content://provider/video/1")
+        val source = (SourceNormalizer.fromPicker(uri, Access()) as SourceResult.Accepted).source
+        val revoked = Access(readable = false)
+        val result = SourceNormalizer.reopen(source, revoked)
+        assertEquals(Reason.NOT_READABLE, (result as SourceResult.Rejected).reason)
+        assertEquals(1, revoked.opened)
+    }
+
+    @Test fun `missing grant never claims durable reopen`() {
+        val uri = Uri.parse("content://provider/video/1")
+        val source = (SourceNormalizer.fromPicker(uri, Access().also { it.persistResult = false }) as SourceResult.Accepted).source
+        assertFalse(source.persistable)
+        assertEquals(Reason.NOT_READABLE, (SourceNormalizer.reopen(source, Access(false)) as SourceResult.Rejected).reason)
     }
 
     @Test fun `intent candidates converge to one accepted source`() {

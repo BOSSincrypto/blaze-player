@@ -1,6 +1,7 @@
 package com.blaze.player.source
 
 import android.content.Intent
+import android.content.ContentResolver
 import android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION
 import android.content.Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION
 import android.net.Uri
@@ -19,11 +20,20 @@ enum class Reason {
     ADAPTIVE_NOT_SUPPORTED, NOT_READABLE, UNSUPPORTED_MEDIA
 }
 
-data class NormalizedSource(val uri: Uri, val local: Boolean, val persistable: Boolean = false)
+/** Durable source record. Identity is the canonical string, not a transient Uri instance. */
+data class NormalizedSource(
+    val uri: Uri,
+    val local: Boolean,
+    val persistable: Boolean = false,
+    val identity: String = uri.toString()
+)
 
 interface LocalSourceAccess {
     fun canRead(uri: Uri): Boolean
     fun takePersistableReadPermission(uri: Uri): Boolean
+
+    /** Opens the source at preparation time, allowing revocation to fail safely. */
+    fun openForPlayback(uri: Uri): Boolean = canRead(uri)
 
     /** Attempts persistence only when the originating intent advertised that grant. */
     fun takePersistableReadPermission(uri: Uri, grantFlags: Int): Boolean {
@@ -31,6 +41,20 @@ interface LocalSourceAccess {
             grantFlags and FLAG_GRANT_PERSISTABLE_URI_PERMISSION == 0) return false
         return takePersistableReadPermission(uri)
     }
+}
+
+/** ContentResolver adapter shared by picker intake and playback preparation. */
+class ContentResolverSourceAccess(private val resolver: ContentResolver) : LocalSourceAccess {
+    override fun canRead(uri: Uri): Boolean = runCatching {
+        resolver.openAssetFileDescriptor(uri, "r")?.use { true } == true
+    }.getOrDefault(false)
+
+    override fun openForPlayback(uri: Uri): Boolean = canRead(uri)
+
+    override fun takePersistableReadPermission(uri: Uri): Boolean = runCatching {
+        resolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        true
+    }.getOrDefault(false)
 }
 
 object SourceNormalizer {
@@ -42,6 +66,18 @@ object SourceNormalizer {
 
     fun fromPicker(uri: Uri?, access: LocalSourceAccess, grantFlags: Int = FLAG_GRANT_READ_URI_PERMISSION or FLAG_GRANT_PERSISTABLE_URI_PERMISSION): SourceResult =
         normalizeLocal(uri, access, grantFlags)
+
+    /** Rehydrates a durable source identity after process recreation. */
+    fun reopen(source: NormalizedSource, access: LocalSourceAccess): SourceResult {
+        if (!source.local || !source.persistable) return SourceResult.Rejected(Reason.NOT_READABLE)
+        val uri = runCatching { Uri.parse(source.identity) }.getOrNull()
+            ?: return SourceResult.Rejected(Reason.EMPTY)
+        if (uri.scheme != "content" || uri.authority.isNullOrBlank()) return SourceResult.Rejected(Reason.EMPTY)
+        if (!runCatching { access.openForPlayback(uri) }.getOrDefault(false)) {
+            return SourceResult.Rejected(Reason.NOT_READABLE)
+        }
+        return SourceResult.Accepted(MediaItem.fromUri(uri), source.copy(uri = uri))
+    }
 
     fun fromIntent(intent: Intent, access: LocalSourceAccess): SourceResult {
         // Deterministic precedence: a typed stream URI, then data URI, then SEND text.

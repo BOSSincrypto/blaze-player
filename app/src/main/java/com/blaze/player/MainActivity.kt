@@ -15,7 +15,7 @@ import com.blaze.player.playback.PlaybackService
 import com.blaze.player.ui.PlaybackControls
 import com.blaze.player.ui.PlaybackGestureHandler
 import com.blaze.player.ui.PlaybackMath
-import com.blaze.player.source.LocalSourceAccess
+import com.blaze.player.source.ContentResolverSourceAccess
 import com.blaze.player.source.SourceNormalizer
 import android.content.Intent
 import android.net.Uri
@@ -105,16 +105,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun preparePickerUri(uri: Uri) {
-        val access = object : LocalSourceAccess {
-            override fun canRead(uri: Uri): Boolean = runCatching {
-                contentResolver.openAssetFileDescriptor(uri, "r")?.use { true } == true
-            }.getOrDefault(false)
-
-            override fun takePersistableReadPermission(uri: Uri): Boolean = runCatching {
-                contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                true
-            }.getOrDefault(false)
-        }
+        val access = ContentResolverSourceAccess(contentResolver)
         val result = SourceNormalizer.fromPicker(
             uri,
             access,
@@ -138,15 +129,7 @@ class MainActivity : ComponentActivity() {
         val intentKey = listOf(input.action, input.data?.toString(), input.getParcelableExtra<Uri>(Intent.EXTRA_STREAM)?.toString(), input.getStringExtra(Intent.EXTRA_TEXT)).joinToString("|")
         if (intentKey == lastIntentKey) return
         lastIntentKey = intentKey
-        val result = SourceNormalizer.fromIntent(input, object : LocalSourceAccess {
-            override fun canRead(uri: Uri) = runCatching {
-                contentResolver.openAssetFileDescriptor(uri, "r")?.use { true } == true
-            }.getOrDefault(false)
-            override fun takePersistableReadPermission(uri: Uri) = runCatching {
-                contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION)
-                true
-            }.getOrDefault(false)
-        })
+        val result = SourceNormalizer.fromIntent(input, ContentResolverSourceAccess(contentResolver))
         if (result is com.blaze.player.source.SourceResult.Accepted) {
             lastMediaItem = result.mediaItem
             showLoading()

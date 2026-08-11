@@ -125,7 +125,20 @@ class PlaybackService : MediaSessionService() {
                             .getOrDefault(false)
                     // Reconnects or duplicate intent delivery must not reprepare the
                     // authoritative item. A genuinely new selection still replaces it.
-                    if (item != null && (customCommand == retryPreparation || !(item.mediaId == preparedMediaId &&
+                    if (item != null && item.localConfiguration?.uri?.scheme == "content" &&
+                        !runCatching {
+                            applicationContext.contentResolver.openAssetFileDescriptor(
+                                item.localConfiguration!!.uri, "r"
+                            )?.use { true } == true
+                        }.getOrDefault(false)
+                    ) {
+                        autoplayPending = false
+                        updateState(PlaybackState(PlaybackStatus.ERROR, PlaybackError(
+                            "Video unavailable",
+                            "This video is no longer accessible. Re-select it from storage.",
+                            false
+                        ), item.mediaId))
+                    } else if (item != null && (customCommand == retryPreparation || !(item.mediaId == preparedMediaId &&
                                 session.player.currentMediaItem?.mediaId == item.mediaId)) {
                         autoplayPending = shouldAutoplay
                         preparedMediaId = item.mediaId
