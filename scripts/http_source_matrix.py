@@ -141,16 +141,25 @@ def request(port, path, headers=None):
 
 def main():
     REPORT.parent.mkdir(parents=True, exist_ok=True)
-    prerequisites = (
-        os.environ.get("GITHUB_ACTIONS", "").lower() == "true"
-        and bool(os.environ.get("ANDROID_HOME") or os.environ.get("ANDROID_SDK_ROOT"))
-        and os.environ.get("ANDROID_GATE_PASSED") == "true"
-    )
+    # The workflow performs the authoritative JDK/API check immediately before
+    # this fixture. Keep this guard as a second, fail-closed boundary, but do
+    # not accept a caller-controlled "gate passed" flag as evidence.
+    sdk_root = os.environ.get("ANDROID_HOME") or os.environ.get("ANDROID_SDK_ROOT")
+    api31_or_newer = False
+    if sdk_root:
+        platforms = Path(sdk_root) / "platforms"
+        api31_or_newer = any(
+            path.is_dir() and path.name.startswith("android-") and
+            path.name.removeprefix("android-").isdigit() and
+            int(path.name.removeprefix("android-")) >= 31
+            for path in platforms.iterdir()
+        ) if platforms.is_dir() else False
+    prerequisites = os.environ.get("GITHUB_ACTIONS", "").lower() == "true" and api31_or_newer
     if not prerequisites:
         REPORT.write_text(json.dumps({"status": "blocked", "validation": "unverified",
-                                      "reason": "requires passing CI Android gate and Android SDK"}, indent=2) + "\n")
-        print("HTTP source matrix: blocked/unverified (passing CI Android gate and SDK required)")
-        return 0
+                                      "reason": "requires CI Android SDK/API 31+"}, indent=2) + "\n")
+        print("HTTP source matrix: blocked/unverified (CI Android SDK/API 31+ required)")
+        return 1
 
     Fixture.requests = []
     server = HTTPServer(("127.0.0.1", 0), Fixture)

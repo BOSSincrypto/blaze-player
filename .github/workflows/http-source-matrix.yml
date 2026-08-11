@@ -38,7 +38,6 @@ jobs:
       - name: Run fake HTTP data-source component test once
         env:
           GITHUB_ACTIONS: 'true'
-          ANDROID_GATE_PASSED: 'true'
           HTTP_MATRIX_REPORT: build/reports/http-source-matrix.json
         run: python3 scripts/http_source_matrix.py
       - name: Run autoplay service transition component test once
@@ -47,22 +46,7 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          mkdir -p build/reports/walking-skeleton-followup
-          python3 - <<'PY'
-          import json
-          from pathlib import Path
-          report = {
-              "status": "verified",
-              "environment": "GitHub Actions JDK 17 Android API 35 (API 31+ required)",
-              "executions": [
-                  {"assertion": "VAL-PLAYER-002", "test": "com.blaze.player.source.SourcePolicyTest", "count": 1},
-                  {"assertion": "VAL-PLAYER-006", "test": "scripts/http_source_matrix.py", "count": 1},
-                  {"assertion": "VAL-PLAYER-008", "test": "com.blaze.player.playback.AutoplayTransitionControllerTest", "count": 1},
-              ],
-              "device_playback": "unverified",
-          }
-          Path("build/reports/walking-skeleton-followup/evidence.json").write_text(json.dumps(report, indent=2) + "\n")
-          PY
+          python3 scripts/record_walking_skeleton_followup.py
       - name: Upload follow-up evidence
         if: always()
         uses: actions/upload-artifact@65462800fd760344b1a7b4382951275a0abb4808
