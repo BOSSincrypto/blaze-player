@@ -44,14 +44,13 @@ jobs:
           mkdir -p build/reports/deferred-test-evidence/source-policy \
             build/reports/deferred-test-evidence/autoplay
 
-          # Clear stale live reports once, then snapshot the two exact outputs
-          # from the single combined test invocation.
+          # Clear stale live reports once, then snapshot the two class reports
+          # from the single combined test invocation. Gradle may choose report
+          # filenames that do not match the fully qualified class name.
           if [[ -d app/build/test-results/testDebugUnitTest ]]; then
             find app/build/test-results/testDebugUnitTest -type f -delete
             find app/build/test-results/testDebugUnitTest -depth -type d -empty -delete
           fi
-          source_policy_source='app/build/test-results/testDebugUnitTest/TEST-com.blaze.player.source.SourcePolicyTest.xml'
-          autoplay_source='app/build/test-results/testDebugUnitTest/TEST-com.blaze.player.playback.AutoplayTransitionControllerTest.xml'
           source_policy_destination='build/reports/deferred-test-evidence/source-policy/TEST-com.blaze.player.source.SourcePolicyTest.xml'
           autoplay_destination='build/reports/deferred-test-evidence/autoplay/TEST-com.blaze.player.playback.AutoplayTransitionControllerTest.xml'
           find build/reports/deferred-test-evidence/source-policy \
@@ -64,21 +63,33 @@ jobs:
           set -e
 
           snapshot_status=0
-          source_policy_count=$(find app/build/test-results/testDebugUnitTest -type f \
-            -name 'TEST-com.blaze.player.source.SourcePolicyTest.xml' | wc -l)
-          autoplay_count=$(find app/build/test-results/testDebugUnitTest -type f \
-            -name 'TEST-com.blaze.player.playback.AutoplayTransitionControllerTest.xml' | wc -l)
-          if (( source_policy_count != 1 )); then
-            printf 'Expected exactly one source: %s\n' "$source_policy_source" >&2
+          source_policy_reports=()
+          while IFS= read -r -d '' report; do
+            if grep -Fq 'classname="com.blaze.player.source.SourcePolicyTest"' "$report"; then
+              source_policy_reports+=("$report")
+            fi
+          done < <(find app/build/test-results/testDebugUnitTest -type f -name '*.xml' -print0)
+          autoplay_reports=()
+          while IFS= read -r -d '' report; do
+            if grep -Fq 'classname="com.blaze.player.playback.AutoplayTransitionControllerTest"' "$report"; then
+              autoplay_reports+=("$report")
+            fi
+          done < <(find app/build/test-results/testDebugUnitTest -type f -name '*.xml' -print0)
+          if (( ${#source_policy_reports[@]} != 1 )); then
+            printf 'Expected exactly one SourcePolicyTest XML report, found %s\n' \
+              "${#source_policy_reports[@]}" >&2
+            printf '%s\n' "${source_policy_reports[@]}" >&2
             snapshot_status=1
           fi
-          if (( autoplay_count != 1 )); then
-            printf 'Expected exactly one source: %s\n' "$autoplay_source" >&2
+          if (( ${#autoplay_reports[@]} != 1 )); then
+            printf 'Expected exactly one AutoplayTransitionControllerTest XML report, found %s\n' \
+              "${#autoplay_reports[@]}" >&2
+            printf '%s\n' "${autoplay_reports[@]}" >&2
             snapshot_status=1
           fi
           if (( snapshot_status == 0 )); then
-            install -m 0444 -- "$source_policy_source" "$source_policy_destination"
-            install -m 0444 -- "$autoplay_source" "$autoplay_destination"
+            install -m 0444 -- "${source_policy_reports[0]}" "$source_policy_destination"
+            install -m 0444 -- "${autoplay_reports[0]}" "$autoplay_destination"
           fi
           if (( test_status != 0 || snapshot_status != 0 )); then
             exit 1
@@ -91,9 +102,10 @@ jobs:
           set -euo pipefail
           source_reports=()
           while IFS= read -r -d '' report; do
-            source_reports+=("$report")
-          done < <(find build/reports/deferred-test-evidence/source-policy -type f \
-            -name 'TEST-com.blaze.player.source.SourcePolicyTest.xml' -print0)
+            if grep -Fq 'classname="com.blaze.player.source.SourcePolicyTest"' "$report"; then
+              source_reports+=("$report")
+            fi
+          done < <(find build/reports/deferred-test-evidence/source-policy -type f -name '*.xml' -print0)
           if (( ${#source_reports[@]} != 1 )); then
             printf 'Expected exactly one SourcePolicyTest XML report, found %s\n' \
               "${#source_reports[@]}" >&2
@@ -102,9 +114,10 @@ jobs:
           fi
           autoplay_reports=()
           while IFS= read -r -d '' report; do
-            autoplay_reports+=("$report")
-          done < <(find build/reports/deferred-test-evidence/autoplay -type f \
-            -name 'TEST-com.blaze.player.playback.AutoplayTransitionControllerTest.xml' -print0)
+            if grep -Fq 'classname="com.blaze.player.playback.AutoplayTransitionControllerTest"' "$report"; then
+              autoplay_reports+=("$report")
+            fi
+          done < <(find build/reports/deferred-test-evidence/autoplay -type f -name '*.xml' -print0)
           if (( ${#autoplay_reports[@]} != 1 )); then
             printf 'Expected exactly one AutoplayTransitionControllerTest XML report, found %s\n' \
               "${#autoplay_reports[@]}" >&2
