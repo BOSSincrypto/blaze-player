@@ -59,8 +59,7 @@ jobs:
 
           set +e
           ./gradlew --no-daemon --rerun-tasks testDebugUnitTest \
-            --tests 'com.blaze.player.source.SourcePolicyTest' \
-            --tests 'com.blaze.player.playback.AutoplayTransitionControllerTest'
+            --tests 'com.blaze.player.*'
           test_status=$?
           set -e
 
