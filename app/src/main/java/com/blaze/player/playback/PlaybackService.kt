@@ -10,6 +10,12 @@ import androidx.media3.session.MediaSessionService
 import androidx.media3.session.SessionCommand
 import androidx.media3.session.SessionCommands
 import androidx.media3.session.SessionResult
+import androidx.room.Room
+import android.net.Uri
+import com.blaze.player.persistence.PlaybackDatabase
+import com.blaze.player.persistence.PlaybackRepository
+import com.blaze.player.persistence.RuntimePlaylist
+import com.blaze.player.persistence.SourceIdentity
 import com.google.common.util.concurrent.Futures
 import com.google.common.util.concurrent.ListenableFuture
 import kotlinx.coroutines.CoroutineScope
@@ -36,7 +42,17 @@ class PlaybackService : MediaSessionService() {
     private lateinit var session: MediaSession
     private val autoplayTransitions = AutoplayTransitionController()
     private var preparedMediaId: String? = null
+    private var resumedMediaId: String? = null
     private val settingsScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+    private lateinit var playbackRepository: PlaybackRepository
+    private val runtimeReconciler = com.blaze.player.persistence.RuntimePlaylistReconciler()
+    private val runtimePlaylist = object : RuntimePlaylist {
+        override fun mediaIds(): List<String> = sharedPlayer?.mediaItems?.map { it.mediaId } ?: emptyList()
+        override fun replaceMediaIds(ids: List<String>) {
+            val player = sharedPlayer ?: return
+            player.setMediaItems(ids.map { MediaItem.Builder().setMediaId(it).setUri(Uri.parse(it)).build() })
+        }
+    }
 
     internal val playerListener = object : Player.Listener {
         override fun onRenderedFirstFrame() {
@@ -63,6 +79,22 @@ class PlaybackService : MediaSessionService() {
             }
             if (state == Player.STATE_READY) updateState(PlaybackState(PlaybackStatus.READY, mediaId = player.currentMediaItem?.mediaId))
             if (state == Player.STATE_READY) {
+                checkpoint(false)
+                val item = player.currentMediaItem
+                if (item != null && resumedMediaId != item.mediaId) {
+                    resumedMediaId = item.mediaId
+                    val identity = SourceIdentity.canonical(item.localConfiguration?.uri ?: Uri.EMPTY)
+                    settingsScope.launch {
+                        val history = playbackRepository.history().firstOrNull { it.sourceIdentity == identity }
+                        val saved = playbackRepository.position(identity)
+                        val resume = PlaybackRepository.resumePosition(saved, history?.completed == true)
+                        withContext(Dispatchers.Main) {
+                            if (sharedPlayer?.currentMediaItem?.mediaId == item.mediaId && resume > 0L) {
+                                sharedPlayer?.seekTo(resume)
+                            }
+                        }
+                    }
+                }
                 autoplayTransitions.prepared(player.currentMediaItem?.mediaId.orEmpty()).forEach { effect ->
                     if (effect == AutoplayTransitionController.Effect.PLAY) player.play()
                 }
@@ -77,6 +109,31 @@ class PlaybackService : MediaSessionService() {
             autoplayTransitions.failed(preparedMediaId.orEmpty())
             updateState(PlaybackState(PlaybackStatus.ERROR, PlaybackErrorMapper.map(error), preparedMediaId))
         }
+
+        override fun onIsPlayingChanged(isPlaying: Boolean) {
+            if (!isPlaying) checkpoint(false)
+        }
+    }
+
+    private fun checkpoint(forceCompletion: Boolean) {
+        val player = sharedPlayer ?: return
+        val item = player.currentMediaItem ?: return
+        val identity = SourceIdentity.canonical(item.localConfiguration?.uri ?: return)
+        val position = player.currentPosition.coerceAtLeast(0L)
+        val duration = player.duration.takeIf { it != C.TIME_UNSET && it >= 0L }
+        val completed = forceCompletion || PlaybackRepository.isCompleted(position, duration)
+        settingsScope.launch {
+            playbackRepository.savePosition(identity, position, duration, System.currentTimeMillis())
+            playbackRepository.recordOpen(identity, System.currentTimeMillis(), completed)
+        }
+    }
+
+    /** Reconciles the active Media3 order from Room without exposing partial mutations. */
+    internal fun reconcileActivePlaylist(playlistId: Long) {
+        settingsScope.launch {
+            playbackRepository.reconcileRuntime(playlistId, runtimePlaylist)
+            runtimeReconciler.reconcile(runtimePlaylist.mediaIds(), runtimePlaylist)
+        }
     }
 
     private fun updateState(value: PlaybackState) {
@@ -85,6 +142,11 @@ class PlaybackService : MediaSessionService() {
 
     override fun onCreate() {
         super.onCreate()
+        playbackRepository = PlaybackRepository(
+            Room.databaseBuilder(applicationContext, PlaybackDatabase::class.java, "playback.db")
+                .addMigrations(PlaybackDatabase.MIGRATION_1_2)
+                .build()
+        )
         val player = synchronized(singletonLock) {
             sharedPlayer ?: ExoPlayer.Builder(applicationContext).build().also { created ->
                 sharedPlayer = created
@@ -147,10 +209,13 @@ class PlaybackService : MediaSessionService() {
                             updateState(PlaybackState(PlaybackStatus.LOADING, mediaId = item.mediaId))
                             session.player.setMediaItem(item)
                             session.player.prepare()
+                            val identity = SourceIdentity.canonical(item.localConfiguration?.uri ?: Uri.EMPTY)
+                            settingsScope.launch { playbackRepository.recordOpen(identity, System.currentTimeMillis()) }
                         }
                     }
                 }
                 performance.boundary(PerformanceStage.POSITION_ACKNOWLEDGEMENT, args.getParcelable<MediaItem>("media_item")?.localConfiguration?.uri?.toString())
+                checkpoint(false)
                 return Futures.immediateFuture(SessionResult(SessionResult.RESULT_SUCCESS))
             }
             }).build().also { sharedSession = it }

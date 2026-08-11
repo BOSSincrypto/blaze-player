@@ -8,6 +8,7 @@ import java.net.URI
 /** Durable Room facade. Playlist order is always re-numbered from zero. */
 class PlaybackRepository(private val database: PlaybackDatabase) {
     private val dao = database.playbackDao()
+    private val runtimeReconciler = RuntimePlaylistReconciler()
 
     suspend fun saveSource(source: NormalizedSource, title: String? = null, durationMs: Long? = null, metadata: String = "") {
         require(durationMs == null || durationMs >= 0)
@@ -59,6 +60,43 @@ class PlaybackRepository(private val database: PlaybackDatabase) {
 
     suspend fun orderedEntries(playlistId: Long): List<PlaylistEntryEntity> = dao.entriesOnce(playlistId)
 
+    suspend fun recordOpen(sourceIdentity: String, nowMs: Long, completed: Boolean = false) {
+        require(sourceIdentity.isNotBlank())
+        val wasCompleted = dao.history().firstOrNull { it.sourceIdentity == sourceIdentity }?.completed == true
+        dao.upsertHistory(PlaybackHistoryEntity(sourceIdentity, nowMs, wasCompleted || completed))
+    }
+
+    suspend fun markCompleted(sourceIdentity: String, nowMs: Long) {
+        val existing = dao.history().firstOrNull { it.sourceIdentity == sourceIdentity }
+        recordOpen(sourceIdentity, nowMs, existing?.completed != false)
+    }
+
+    suspend fun history(): List<PlaybackHistoryEntity> = dao.history()
+
+    suspend fun clearHistory(sourceIdentity: String) = dao.clearHistory(sourceIdentity)
+    suspend fun clearAllHistory() = dao.clearAllHistory()
+
+    suspend fun savePosition(sourceIdentity: String, positionMs: Long, durationMs: Long?, nowMs: Long) {
+        require(positionMs >= 0) { "Position must be nonnegative" }
+        require(durationMs == null || durationMs >= 0) { "Duration must be nonnegative" }
+        val bounded = if (durationMs != null && durationMs > 0) positionMs.coerceAtMost(durationMs) else positionMs
+        dao.upsertPosition(PlaybackPositionEntity(sourceIdentity, bounded, nowMs))
+    }
+
+    suspend fun position(sourceIdentity: String): PlaybackPositionEntity? = dao.position(sourceIdentity)
+
+    companion object {
+        fun isCompleted(positionMs: Long, durationMs: Long?): Boolean {
+            if (positionMs < 0) return false
+            if (durationMs == null || durationMs <= 0) return false
+            val remaining = (durationMs - positionMs).coerceAtLeast(0)
+            return remaining <= 30_000L || positionMs >= durationMs * 0.95
+        }
+
+        fun resumePosition(position: PlaybackPositionEntity?, completed: Boolean): Long =
+            if (completed) 0L else position?.positionMs?.coerceAtLeast(0L) ?: 0L
+    }
+
     /** Adds a canonical source to a playlist, keeping identity rules in one place. */
     suspend fun addToPlaylist(playlistId: Long, source: NormalizedSource): Boolean =
         addToPlaylist(playlistId, SourceIdentity.canonical(source.uri))
@@ -70,9 +108,9 @@ class PlaybackRepository(private val database: PlaybackDatabase) {
      */
     suspend fun reconcileRuntime(playlistId: Long, runtime: RuntimePlaylist): Boolean {
         val authoritative = orderedEntries(playlistId).map { it.sourceIdentity }
-        if (runtime.mediaIds() == authoritative) return false
-        runtime.replaceMediaIds(authoritative)
-        return true
+        val before = runtime.mediaIds()
+        runtimeReconciler.reconcile(authoritative, runtime)
+        return before != runtime.mediaIds()
     }
 }
 

@@ -11,6 +11,8 @@ import androidx.room.RoomDatabase
 import androidx.room.Transaction
 import androidx.room.Update
 import kotlinx.coroutines.flow.Flow
+import androidx.room.migration.Migration
+import androidx.sqlite.db.SupportSQLiteDatabase
 
 @Entity(tableName = "video_sources")
 data class VideoSourceEntity(
@@ -38,6 +40,20 @@ data class PlaylistEntryEntity(
     val playlistId: Long,
     val sourceIdentity: String,
     val orderKey: Int
+)
+
+@Entity(tableName = "playback_history")
+data class PlaybackHistoryEntity(
+    @androidx.room.PrimaryKey val sourceIdentity: String,
+    val lastPlayedAtMs: Long,
+    val completed: Boolean = false
+)
+
+@Entity(tableName = "playback_positions")
+data class PlaybackPositionEntity(
+    @androidx.room.PrimaryKey val sourceIdentity: String,
+    val positionMs: Long,
+    val acknowledgedAtMs: Long
 )
 
 @Dao
@@ -81,6 +97,24 @@ interface PlaybackDao {
     @Query("UPDATE playlist_entries SET orderKey = :orderKey WHERE playlistId = :playlistId AND sourceIdentity = :identity")
     suspend fun updateOrder(playlistId: Long, identity: String, orderKey: Int)
 
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertHistory(value: PlaybackHistoryEntity)
+
+    @Query("SELECT * FROM playback_history ORDER BY lastPlayedAtMs DESC, sourceIdentity ASC")
+    suspend fun history(): List<PlaybackHistoryEntity>
+
+    @Query("DELETE FROM playback_history WHERE sourceIdentity = :identity")
+    suspend fun clearHistory(identity: String)
+
+    @Query("DELETE FROM playback_history")
+    suspend fun clearAllHistory()
+
+    @Insert(onConflict = OnConflictStrategy.REPLACE)
+    suspend fun upsertPosition(value: PlaybackPositionEntity)
+
+    @Query("SELECT * FROM playback_positions WHERE sourceIdentity = :identity")
+    suspend fun position(identity: String): PlaybackPositionEntity?
+
     @Transaction
     suspend fun addEntry(playlistId: Long, identity: String): Boolean {
         val current = entriesOnce(playlistId)
@@ -112,7 +146,16 @@ interface PlaybackDao {
     }
 }
 
-@Database(entities = [VideoSourceEntity::class, PlaylistEntity::class, PlaylistEntryEntity::class], version = 1, exportSchema = false)
+@Database(entities = [VideoSourceEntity::class, PlaylistEntity::class, PlaylistEntryEntity::class, PlaybackHistoryEntity::class, PlaybackPositionEntity::class], version = 2, exportSchema = false)
 abstract class PlaybackDatabase : RoomDatabase() {
     abstract fun playbackDao(): PlaybackDao
+
+    companion object {
+        val MIGRATION_1_2 = object : Migration(1, 2) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL("CREATE TABLE IF NOT EXISTS playback_history (sourceIdentity TEXT NOT NULL PRIMARY KEY, lastPlayedAtMs INTEGER NOT NULL, completed INTEGER NOT NULL DEFAULT 0)")
+                db.execSQL("CREATE TABLE IF NOT EXISTS playback_positions (sourceIdentity TEXT NOT NULL PRIMARY KEY, positionMs INTEGER NOT NULL, acknowledgedAtMs INTEGER NOT NULL)")
+            }
+        }
+    }
 }
