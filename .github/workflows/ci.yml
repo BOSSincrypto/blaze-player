@@ -36,6 +36,31 @@ jobs:
         run: ./gradlew --no-daemon test lint assembleDebug assembleRelease
       - name: Enforce contract coverage
         run: python3 scripts/verify_contract_coverage.py
+      - name: Validate exact APKs and generate provenance
+        env:
+          GRADLE_VERSION: '8.11.1'
+          AGP_VERSION: '8.9.2'
+          KOTLIN_VERSION: '2.0.21'
+          JAVA_VERSION: '17'
+        run: |
+          mkdir -p build/artifacts
+          python3 scripts/validate_apk_artifacts.py \
+            --debug app/build/outputs/apk/debug/app-debug.apk \
+            --release app/build/outputs/apk/release/app-release-unsigned.apk \
+            --output build/artifacts/metadata.json
+          cp app/build/outputs/apk/debug/app-debug.apk build/artifacts/
+          cp app/build/outputs/apk/release/app-release-unsigned.apk build/artifacts/
+      - name: Upload validated APKs, checksums, and metadata
+        uses: actions/upload-artifact@65462800fd760344b1a7b4382951275a0abb4808
+        with:
+          name: blaze-player-apks-${{ github.run_id }}
+          path: |
+            build/artifacts/app-debug.apk
+            build/artifacts/app-release-unsigned.apk
+            build/artifacts/SHA256SUMS
+            build/artifacts/metadata.json
+          if-no-files-found: error
+          retention-days: 14
       - name: Upload test, lint, and build reports
         if: always()
         uses: actions/upload-artifact@65462800fd760344b1a7b4382951275a0abb4808
