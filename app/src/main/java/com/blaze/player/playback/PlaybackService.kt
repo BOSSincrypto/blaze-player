@@ -50,7 +50,7 @@ class PlaybackService : MediaSessionService() {
         /** Decode the Bundleable payload used by custom session commands. */
         internal fun mediaItemFromArgs(args: Bundle): MediaItem? =
             args.getBundle(MEDIA_ITEM_ARGUMENT_KEY)?.let { bundle ->
-                runCatching { MediaItem.CREATOR.fromBundle(bundle) }.getOrNull()
+                runCatching { MediaItem.fromBundle(bundle) }.getOrNull()
             }
 
     }
